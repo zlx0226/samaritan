@@ -21,3 +21,30 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+
+# Local environment and editor settings
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Samaritan · ROOF / TR1</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 舞台：固定 16:9 设计稿坐标系（1920 x 1080），随窗口等比缩放 -->
+  <div class="stage is-prologue" id="stage">
+
+    <!-- 背景板：background.png 铺满整个画面 -->
+    <div class="stage-bg" aria-hidden="true"></div>
+
+    <!-- TR1 面板：左上角，占画面宽高各 60% -->
+    <section class="tr1" id="tr1" aria-label="天台面板 TR1">
+
+      <!-- roof2.jpg 铺满面板内部（留出边框线宽度） -->
+      <div class="tr1-roof" id="tr1Roof">
+        <!-- 四个按钮由 js/config.js 生成 -->
+        <div class="tr1-hotspots" id="hotspots"></div>
+      </div>
+
+      <!-- UI_TR1.png 盖在最上层：边框线 + 顶部装饰缺口的透明素材 -->
+      <img class="tr1-frame" src="assets/UI_TR1.png" alt="" aria-hidden="true">
+    </section>
+
+    <!-- 开发模式下的坐标读数面板（仅在 setDevMode(true) 时出现） -->
+    <div class="dev-panel" id="devPanel" hidden></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
