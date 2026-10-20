@@ -183,6 +183,7 @@ window.ROOF_UI_CONFIG = {
     dangerKillFallMs: 360,
     dangerKillTransitionMs: 100,
     conditionPollMs: 300,
+    waitTimeoutMs: 10000,
     travelMsPerPx: 6.5,
     climbTravelMsPerPx: 7.5,
     climbTurnMs: 500,

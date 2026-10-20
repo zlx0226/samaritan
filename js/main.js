@@ -1316,6 +1316,40 @@
   }
 
   /* 新手教学里被 K 拦下的两种填法：返回 true 表示不填进缺口 */
+  function pathHasInterventionByCurrentDecision() {
+    const conditions = (CFG.editPanel && CFG.editPanel.conditionOptions) ||
+      ['·�߰�ȫ', '·��Σ��'];
+    const path = state.path;
+    for (let i = 0; i < path.length; i += 1) {
+      const id = path[i];
+      const occurrence = path.slice(0, i + 1).filter((x) => x === id).length;
+      for (let c = 0; c < conditions.length; c += 1) {
+        const decision = commandDecisionAt(id, occurrence, conditions[c]);
+        if ((decision.actions || []).some(isInterventionAction)) return true;
+      }
+    }
+    return false;
+  }
+
+  function hasRouteInterventionInstruction() {
+    const rows = [];
+    const addRows = (list) => {
+      (list || []).forEach((row) => {
+        if (rows.indexOf(row) < 0) rows.push(row);
+      });
+    };
+    editContent.forEach(addRows);
+    addRows(attachedRows);
+    return rows.some((row) => {
+      const gap = row.querySelector('.if-gap');
+      return isInterventionAction((gap && gap.dataset.value) || '');
+    });
+  }
+
+  function hasParticipationPlan() {
+    return state.path.indexOf('new-1') >= 0 || hasRouteInterventionInstruction();
+  }
+
   function tutorialBlock(label, gapEl) {
     const lines = (CFG.tutorial && CFG.tutorial.kLines) || {};
     const row = gapEl ? gapEl.closest('.if-row-wrap') : null;
@@ -1968,8 +2002,9 @@
     return decision;
   }
 
-  async function waitForConditionAt(id, label, requireAction, occurrence) {
+  async function waitForConditionAt(id, label, requireAction, occurrence, currentNode) {
     const E = CFG.execution || {};
+    const waitStartedAt = performance.now();
     let condition = state.execCondition || E.condition || '路线安全';
     setExecStatus(state.execDanger
       ? '等待：前路被监视 · ' + condition
@@ -1990,6 +2025,20 @@
         setExecStatus('执行中 · ' + condition);
         logCommandDecision(decision);
         return decision;
+      }
+      if (performance.now() - waitStartedAt >= (E.waitTimeoutMs || 10000)) {
+        const conflictId = E.conflictPoint || 'new-1';
+        const conflictNode = nodeForSpot(conflictId);
+        const forcedPath = conflictNode
+          ? shortestNodePath(currentNode, conflictNode)
+          : null;
+        if (!forcedPath) return null;
+        await appendExecLog('K：等不及了。', 'dialogue');
+        state.execPathNodes = forcedPath.slice();
+        refreshExecutionDanger();
+        const forcedEntry = dangerEntryPoint(forcedPath);
+        await runDangerKill(true, forcedEntry);
+        return null;
       }
       if (requireAction && !actionable && !state.execDanger) {
         setExecStatus('等待：没有前进或干预指令', 'wait');
@@ -3087,7 +3136,12 @@
       showKLine(lines.actionInvalid);
       return;
     }
-    if (hasStuckRoutePoint() && lines.noParticipation) {
+    const hasIntervention = hasRouteInterventionInstruction();
+    if (!hasParticipationPlan() && lines.noParticipation) {
+      showKLine(lines.noParticipation);
+      return;
+    }
+    if (!hasIntervention && hasStuckRoutePoint() && lines.noParticipation) {
       showKLine(lines.noParticipation);
       return;
     }
@@ -3207,7 +3261,7 @@
         if (decision.wait) logCommandDecision(decision);
         else appendExecLog('等待：终点没有前进或干预指令', 'wait');
         decision = await waitForConditionAt(
-          spot.id, spot.label || spot.id, endpointIntervenable, occurrence);
+          spot.id, spot.label || spot.id, endpointIntervenable, occurrence, currentNode);
         if (!decision) return;
       } else {
         logCommandDecision(decision);
