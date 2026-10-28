@@ -1,0 +1,1422 @@
+/* ============================================================
+   ROOF / TR1 —— 天台面板 + 四个交互按钮
+   坐标体系：以 1920 x 1080 为设计稿，--u 表示 1 个设计像素，
+   所有尺寸都乘以 --u，因此整页可以任意缩放而不走形。
+   ============================================================ */
+
+:root {
+  --page-bg: #04070a;      /* 画面外的黑边 */
+  --accent: #9fd3de;       /* 高亮 / 焦点色（取自按钮的青灰调） */
+  --frame-line: #20302f;   /* 装饰框线色：从 UI_TR1.png 取样（rgb 32,48,47） */
+
+  /* ---- 点击标记与连线的配色：想换科技色只改这几行 ----
+     形状照搬 botton 原图：一块圆盘 + 一道更深色的圆环。
+     原图结构（按半径算）：内盘 0~73%、透明缝 74~87%、外环带 88~100%；
+     标记状态把那道环画在原图那条缝的位置（往内挪过），外圈留一圈底色。 */
+  --mark: #00ffc6;                          /* 圆盘底色：亮薄荷 */
+  --mark-ring: #00a87c;                     /* 外圈环带：更深的薄荷 */
+  --mark-hover: #00d8a8;                    /* 悬停时圆盘压深一档 */
+  --mark-ring-hover: #00855e;               /* 悬停时环带再深一档 */
+  --mark-glow: rgba(0, 255, 198, .8);       /* 外发光 */
+  --route: #3affd0;                         /* 虚线箭头颜色 */
+
+  /* 选项（最下框里的蓝色选项、以及填进 if 缺口的同款） */
+  --option-fill: linear-gradient(180deg, rgba(30, 60, 92, .88), rgba(16, 32, 50, .62));
+  --option-line: rgba(96, 186, 255, .42);
+  --option-text: #dbeaff;
+  --option-glow: rgba(90, 180, 255, .55);
+  --option-fill-hover: linear-gradient(180deg, rgba(48, 92, 140, .95), rgba(24, 48, 72, .85));
+  --option-line-hover: rgba(130, 205, 255, .95);
+  /* 填入 if 缺口用的纯色底：取深蓝 #1e3a56 与蓝绿 #1c5b52 的中间色 */
+  --option-fill-solid: #1d4b54;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--page-bg);
+  font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.is-booting {
+  background: #fff;
+}
+
+body.is-booting .stage {
+  visibility: hidden;
+}
+
+/* ---------- 舞台 ---------- */
+.stage {
+  position: relative;
+  width: min(100vw, 177.7778vh);   /* 16:9 约束，完整可见 */
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  --s: 1;                          /* 由 js 写入：舞台宽度 / 1920 */
+  --u: calc(1px * var(--s));       /* 1 个设计像素 */
+}
+
+.stage-bg {
+  position: absolute;
+  inset: 0;
+  background: url(../assets/background.png) center / 100% 100% no-repeat;
+}
+
+/*
+
+* ---------- 装饰框（仿 TR1：同色细边框 + 顶部装饰缺口） ---------- */
+.frame-panel {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  pointer-events: none;            /* 纯装饰，不挡点击 */
+}
+
+.frame-panel svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame-line {
+  fill: none;
+  stroke: var(--frame-line);
+  stroke-width: var(--frame-line-width, 3);
+}
+
+.frame-line-dashed { stroke-dasharray: var(--frame-dash, 34 16); }
+
+.frame-notch { fill: var(--frame-line); }
+
+/* ---------- 最下框里的选项条（悬停 / 最后选中的按钮对应） ---------- */
+.option-bar {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(var(--gap) * var(--u));
+  pointer-events: none;              /* 空着的时候不吃点击 */
+  z-index: 7;                        /* 子选项弹出时要能盖住上面的东西 */
+}
+
+.option-bar.has-subs {
+  z-index: 13;
+}
+
+.option-item {
+  min-width: calc(190 * var(--u));
+  height: calc(74 * var(--u));
+  padding: 0 calc(30 * var(--u));
+  border: calc(2 * var(--u)) solid var(--option-line);
+  border-radius: calc(10 * var(--u));
+  background: var(--option-fill);
+  color: var(--option-text);
+  /* 与 complete 同一套字体处理：等宽 + 大字距 + 同风格辉光（这里换成蓝色系） */
+  font: calc(26 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .34em;
+  text-indent: .34em;
+  text-transform: uppercase;
+  text-shadow: 0 0 calc(10 * var(--u)) var(--option-glow);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+  animation: option-in .18s ease both;
+}
+
+.option-item:hover {
+  border-color: var(--option-line-hover);
+  background: var(--option-fill-hover);
+  box-shadow: 0 0 calc(14 * var(--u)) var(--option-glow);
+}
+
+.option-item:focus-visible {
+  outline: calc(2 * var(--u)) dashed var(--accent);
+  outline-offset: calc(3 * var(--u));
+}
+
+/* “干预”之类的选项：点下去先在它上方弹出一排子选项 */
+.option-subs {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + calc(8 * var(--u)));
+  display: flex;
+  flex-direction: column;              /* 竖直排列 */
+  align-items: stretch;
+  gap: calc(8 * var(--u));
+  padding: calc(10 * var(--u));
+  border: calc(1 * var(--u)) solid rgba(0, 255, 198, .5);
+  border-radius: calc(14 * var(--u));
+  background: rgba(10, 26, 30, .82);    /* 半透明底框 */
+  box-shadow: inset 0 0 calc(18 * var(--u)) rgba(0, 255, 198, .08),
+              0 0 calc(18 * var(--u)) rgba(0, 0, 0, .45);
+  backdrop-filter: blur(2px);
+  z-index: 8;
+}
+
+.option-item.is-sub {
+  --option-fill: linear-gradient(180deg, rgba(30, 60, 92, 1), rgba(16, 32, 50, .96));
+  --option-fill-hover: linear-gradient(180deg, rgba(48, 92, 140, 1), rgba(24, 48, 72, .98));
+  background: linear-gradient(180deg, #1e3c5c, #102032);
+  width: 100%;
+  min-width: calc(170 * var(--u));      /* 只比母选项略小 */
+  height: calc(62 * var(--u));
+  padding: 0 calc(20 * var(--u));
+  font-size: calc(24 * var(--u));
+  letter-spacing: .12em;
+  text-indent: .12em;
+}
+
+.option-subs {
+  background: #0a1a1e;
+  z-index: 12;
+}
+
+.option-item.is-sub:hover {
+  background: linear-gradient(180deg, #305c8c, #183048);
+}
+
+@keyframes option-in {
+  from { opacity: 0; transform: translateY(calc(8 * var(--u))); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- 右侧框的编辑界面 ---------- */
+.edit-panel {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--gap) * var(--u));
+  padding: calc(var(--pad) * var(--u));
+  pointer-events: none;               /* 空白处不挡点击 */
+}
+
+.edit-panel > * { pointer-events: auto; }
+
+/* 小旗按钮 */
+.edit-flag {
+  flex: 0 0 auto;
+  width: 100%;                        /* 左右外扩，撑满右侧框 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .35);
+  background-color: rgba(26, 52, 48, .75);
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+/* 通用的小旗图标（flag.png 裁到旗子本身，按百分比定位） */
+.flag-icon {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  pointer-events: none;
+}
+
+.flag-icon img {
+  position: absolute;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ---------- 编辑中围住圆按钮的旋转环 ---------- */
+.edit-ring {
+  position: absolute;
+  width: calc(var(--btn-size) * 1.75);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  pointer-events: none;
+  z-index: 5;
+  display: none;
+  animation: edit-ring-spin 4s steps(4) infinite;   /* 每秒逆时针顿一下 90° */
+}
+
+.edit-ring.is-on { display: block; }
+
+@keyframes edit-ring-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+/* ---------- 编辑过内容的圆按钮：左上角小旗（编辑时统一隐藏） ---------- */
+.hotspot-flag {
+  position: absolute;
+  left: 2%;
+  top: 2%;
+  display: none;
+  transform: translate(-35%, -35%);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.hotspot.has-edit .hotspot-flag { display: block; }
+.stage.is-editing .hotspot-flag { display: none; }
+
+.edit-flag:hover {
+  border-color: rgba(0, 255, 198, .9);
+  background-color: rgba(38, 76, 70, .9);
+  box-shadow: 0 0 calc(16 * var(--u)) rgba(0, 255, 198, .22);
+}
+
+.edit-flag:focus-visible,
+.edit-add:focus-visible,
+.edit-end:focus-visible,
+.if-value:focus-visible,
+.if-gap:focus-visible {
+  outline: calc(2 * var(--u)) dashed var(--accent);
+  outline-offset: calc(3 * var(--u));
+}
+
+/* 编辑模式：小旗隐藏，其余出现 */
+.edit-title,
+.edit-add,
+.edit-rows,
+.edit-end { display: none; }
+
+.edit-panel.is-editing .edit-flag { display: none; }
+.edit-panel.is-editing .edit-title { display: block; }
+.edit-panel.is-editing .edit-add { display: flex; }
+.edit-panel.is-editing .edit-rows { display: flex; }
+.edit-panel.is-editing .edit-end { display: flex; }
+
+.edit-title {
+  flex: 0 0 auto;
+  color: #d6fff4;
+  font-family: Consolas, "Cascadia Mono", ui-monospace, monospace;
+  line-height: 1;
+  letter-spacing: .34em;
+  text-indent: .34em;
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(0, 235, 205, .5);
+}
+
+.edit-add,
+.edit-end {
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .45);
+  background: linear-gradient(180deg, rgba(28, 74, 64, .9), rgba(16, 44, 38, .72));
+  color: #d8fff5;
+  font: calc(24 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .16em;
+  text-indent: .16em;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.edit-add { margin-top: calc(12 * var(--u)); }   /* 添加按钮往下挪一点 */
+
+.edit-add.is-delete {
+  border-color: rgba(255, 128, 118, .55);
+  background: linear-gradient(180deg, rgba(96, 44, 40, .9), rgba(48, 22, 20, .75));
+  color: #ffd9d4;
+}
+
+.edit-add.is-delete:hover {
+  border-color: rgba(255, 150, 140, .95);
+  background: linear-gradient(180deg, rgba(128, 58, 52, .95), rgba(64, 28, 26, .85));
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(255, 120, 110, .22);
+}
+
+.edit-add:hover,
+.edit-end:hover {
+  border-color: rgba(0, 255, 198, .95);
+  background: linear-gradient(180deg, rgba(44, 110, 96, .95), rgba(20, 58, 50, .85));
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(0, 255, 198, .25);
+}
+
+/* 「指令」和「添加+」之间的分割线：两头虚线、中间实线，颜色同左上框的边线 */
+.edit-divider {
+  flex: 0 0 auto;
+  display: none;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  width: 100%;
+}
+
+.edit-panel.is-editing .edit-divider { display: flex; }
+
+.edit-divider i {
+  display: block;
+  height: calc(3 * var(--u));
+}
+
+.edit-divider .dash {
+  flex: 0 0 20%;
+  background: repeating-linear-gradient(90deg,
+    var(--frame-line) 0 calc(14 * var(--u)),
+    transparent calc(14 * var(--u)) calc(26 * var(--u)));
+}
+
+.edit-divider .solid {
+  flex: 1 1 auto;
+  background: var(--frame-line);
+}
+
+/* if 行容器：多了就滚动 */
+.edit-rows-area {
+  display: none;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  gap: calc(10 * var(--u));
+}
+
+.edit-panel.is-editing .edit-rows-area { display: flex; }
+
+.edit-occurrences {
+  flex: 0 0 auto;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  padding-top: calc(var(--rows-top, 0) * var(--u) + 22 * var(--u));
+}
+
+.edit-panel.is-editing .edit-occurrences { display: flex; }
+
+.edit-occurrence {
+  width: calc(34 * var(--u));
+  height: calc(34 * var(--u));
+  padding: 0;
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .48);
+  border-radius: calc(5 * var(--u));
+  background: rgba(8, 28, 28, .9);
+  color: #b9ffe9;
+  font: 700 calc(16 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.edit-occurrence.is-active {
+  border-color: rgba(0, 255, 198, .95);
+  background: rgba(32, 104, 88, .95);
+  box-shadow: 0 0 calc(10 * var(--u)) rgba(0, 255, 198, .35);
+}
+
+.edit-rows {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 0;
+  margin-top: calc(var(--rows-top, 0) * var(--u));   /* 整块 if 区域下移 */
+  /* 留出位置，避免左上角的次数圆标被滚动容器裁掉 */
+  padding: calc(22 * var(--u)) calc(6 * var(--u)) calc(6 * var(--u)) calc(22 * var(--u));
+  flex-direction: column;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* 一行 if：外层容器不裁切（留给左上角的次数标），里面的 .if-row 按素材包围盒裁切 */
+.if-row-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.if-row {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.if-row-wrap.is-selected > .if-row {
+  box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(0, 255, 198, .6);
+  border-radius: calc(10 * var(--u));
+}
+
+/* if 左上角：这是该圆按钮第几次被选中 */
+.if-count {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-125%, -48%);  /* 放到 if 图外左上角，并且明显往左 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .7);
+  border-radius: 50%;
+  background: rgba(6, 20, 22, .92);
+  color: #b9ffe9;
+  font: 700 calc(18 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  text-shadow: 0 0 calc(8 * var(--u)) rgba(0, 255, 198, .6);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.if-img {
+  position: absolute;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 图形不透明部分的点击判定：只有这部分能选中行（添加→删除） */
+.if-hit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.if-hit path {
+  pointer-events: fill;
+  cursor: pointer;
+}
+
+/* “if 后”的纯色按钮（效果待做） */
+.if-value {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  border-radius: calc(6 * var(--u));
+  background: #7d7130;                 /* 默认：暗一档的金黄纯色 */
+  color: #241f0a;
+  font: 700 calc(20 * var(--u)) / 1 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .08em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.if-value:hover { background: #8c7f39; }
+
+/* 点过之后：亮黄，和被点之前（暗金）明显区分；等选条件时再加一圈白描边 */
+.if-value.is-condition { background: #d9c65a; }
+.if-value.is-condition:hover { background: #e2d06c; }
+.if-value.is-armed { box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, .8); }
+
+/* 最下框里的黄色条件选项：与蓝色选项同一套样式，只把色系换成黄 */
+.option-item.is-condition {
+  --option-fill: linear-gradient(180deg, rgba(122, 102, 32, .9), rgba(64, 52, 16, .75));
+  --option-line: rgba(217, 198, 90, .5);
+  --option-text: #ffefb8;
+  --option-glow: rgba(217, 198, 90, .55);
+  --option-fill-hover: linear-gradient(180deg, rgba(158, 134, 44, .95), rgba(88, 72, 22, .85));
+  --option-line-hover: rgba(255, 232, 140, .95);
+}
+
+/* “if”下方的缺口：透明按钮，悬停变灰，点一下进入"等待选选项" */
+.if-gap {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  /* 填入后的字与 “if 后” 格子里的字同样式（同字体/字重/字号/字距）；
+     这里底色偏深，所以字色用浅色 */
+  color: #eaf6ff;
+  font: 700 calc(20 * var(--u)) / 1 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .08em;
+  text-indent: .08em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .14s ease, box-shadow .14s ease;
+}
+
+.if-gap:hover { background: rgba(200, 200, 200, .18); }     /* 悬停变灰 */
+
+/* 填入选项后不再是透明的，而是和最下框的选项同色 */
+.if-gap.is-filled {
+  background: var(--option-fill-solid);    /* 纯色（不是渐变） */
+  box-shadow: inset 0 0 0 calc(2 * var(--u)) var(--option-line);
+}
+
+.if-gap.is-filled:hover { background: #285f65; }
+
+.if-gap.is-armed {
+  background: rgba(0, 255, 198, .08);
+  box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(0, 255, 198, .65);
+}
+
+.if-gap-text {
+  pointer-events: none;
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(90, 180, 255, .55);
+}
+
+/* 编辑模式：所有圆按钮不可点击 */
+.stage.is-editing .hotspot { pointer-events: none; }
+
+/* ---------- K 的台词框（放在那条上下虚线的框里） ---------- */
+.k-box {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  display: flex;
+  align-items: center;
+  padding: 0 calc(28 * var(--u));
+  color: #d6fff4;
+  font: calc(30 * var(--u)) / 1.25 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .04em;
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(0, 255, 198, .25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+
+.k-box.is-on {
+  opacity: 1;
+  z-index: 8;
+}
+
+.k-name {
+  flex: 0 0 auto;
+  color: #9ff5dd;
+  font-weight: 700;
+}
+
+.k-text { flex: 1 1 auto; }
+
+.k-box.is-on .k-text::after {
+  content: "▌";
+  margin-left: calc(2 * var(--u));
+  color: #9ff5dd;
+  animation: k-caret 1s steps(2) infinite;
+}
+
+@keyframes k-caret {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+/* ---------- 面板按钮（同色系，功能待接） ---------- */
+.panel-button {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  padding: 0;
+  border: calc(3 * var(--u)) solid #2f4442;        /* 与 panel-b / panel-c 同色 */
+  border-radius: calc(12 * var(--u));              /* 圆角 */
+  background: linear-gradient(180deg, rgba(78, 124, 117, .95), rgba(44, 72, 69, .8));
+  color: #eafff9;
+  /* HUD 味：等宽字体 + 大字距 + 全大写 + 青色辉光 */
+  font: calc(26 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .34em;
+  text-indent: .34em;                              /* 抵消尾部字距，让文字视觉居中 */
+  text-transform: uppercase;
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(0, 235, 205, .6),
+               0 0 calc(22 * var(--u)) rgba(0, 235, 205, .28);
+  cursor: pointer;
+  transition: background .18s ease, box-shadow .18s ease, transform .12s ease;
+}
+
+.panel-button:hover {
+  background: linear-gradient(180deg, rgba(100, 152, 143, .98), rgba(58, 92, 88, .88));
+  box-shadow: 0 0 calc(18 * var(--u)) rgba(0, 230, 200, .22);
+}
+
+.panel-button:active { transform: scale(.995); }
+
+.panel-button.is-disabled,
+.panel-button:disabled,
+.panel-button.is-disabled:hover,
+.panel-button:disabled:hover {
+  border-color: #3b4744;
+  background: linear-gradient(180deg, rgba(58, 66, 64, .5), rgba(30, 34, 33, .4));
+  color: #7b8a87;
+  text-shadow: none;
+  box-shadow: none;
+  cursor: default;
+}
+
+.panel-button:focus-visible {
+  outline: calc(2 * var(--u)) dashed var(--accent);
+  outline-offset: calc(3 * var(--u));
+}
+
+/* ---------- TR1 面板 ---------- */
+.tr1 {
+  position: absolute;
+  left: calc(var(--tr1-left) * var(--u));
+  top: calc(var(--tr1-top) * var(--u));
+  width: calc(var(--tr1-width) * var(--u));
+  height: calc(var(--tr1-h) * var(--u));   /* 只在前置互动里设（无该变量时自动回落到 16:9） */
+  aspect-ratio: 16 / 9;            /* 与 UI_TR1.png 素材同比例 */
+}
+
+/* 屋面：按 roof2.jpg 原始比例居中放在面板里，四周留出边距
+   （比例锁死 + background-size 100% 100% → 不拉伸，
+     所以按钮坐标百分比与 roof2.jpg 的图片像素严格一一对应） */
+.tr1-roof {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--roof-w);
+  aspect-ratio: 3000 / 1678;       /* roof2.jpg 原始宽高比 */
+  transform: translate(-50%, -50%);
+  background: url(../assets/roof2.jpg) center / 100% 100% no-repeat;
+  z-index: 1;
+}
+
+/* 边框素材盖在屋面上：线条与顶部装饰缺口都完整露出 */
+.tr1-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ---------- 前置互动（通讯） ---------- */
+.tr1-backdrop,
+.prologue-frame,
+.prologue-comms,
+.prologue-tops { display: none; }
+
+/* 黑色衬底：与 roof 同宽，填满框内高度，压在 roof 下面 */
+.tr1-backdrop {
+  position: absolute;
+  left: 50%;
+  top: calc(34 * var(--u));
+  bottom: calc(34 * var(--u));
+  width: var(--roof-w);
+  transform: translateX(-50%);
+  background: #000;
+  z-index: 0;
+}
+
+.stage.is-prologue .tr1-backdrop { display: block; }
+.stage.is-prologue .prologue-frame { display: block; }
+.stage.is-prologue .prologue-comms { display: flex; }
+.stage.is-prologue .prologue-tops { display: flex; }
+
+/* 退出通讯时右侧内容先淡出，左侧 roof / 底线仍在收拢 */
+.stage.is-leaving-prologue .prologue-frame,
+.stage.is-leaving-prologue .prologue-comms,
+.stage.is-leaving-prologue .prologue-tops {
+  opacity: 0;
+  transition: opacity .26s ease;
+}
+
+/* 前置互动里藏掉指挥模式的那套 UI */
+.stage.is-prologue .frame-panel:not(.prologue-frame),
+.stage.is-prologue .tr1-hotspots,
+.stage.is-prologue .tr1-arrows,
+.stage.is-prologue .k-box,
+.stage.is-prologue .option-bar,
+.stage.is-prologue .edit-panel,
+.stage.is-prologue .edit-ring,
+.stage.is-prologue .panel-button { display: none !important; }
+
+/* 通讯窗里的台词 */
+.prologue-comms {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+  padding: calc(26 * var(--u)) calc(24 * var(--u));
+  overflow: hidden;
+  color: #d6fff4;
+  font: calc(25 * var(--u)) / 1.45 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+
+.comms-channel {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  color: rgba(190, 245, 231, .7);
+  font: 600 calc(18 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .16em;
+  text-shadow: 0 0 calc(7 * var(--u)) rgba(0, 255, 198, .16);
+}
+
+.comms-dots {
+  display: inline-flex;
+  width: calc(28 * var(--u));
+  margin-left: calc(5 * var(--u));
+}
+
+.comms-dot {
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+
+.comms-dot.is-on { opacity: 1; }
+
+.comms-line {
+  flex: 0 0 auto;
+  white-space: pre-wrap;
+  text-shadow: 0 0 calc(8 * var(--u)) rgba(0, 255, 198, .18);
+}
+
+/* 男的话变灰，K 的话保持原色 */
+.comms-line.is-man {
+  color: #9aa8a7;
+  text-shadow: none;
+}
+
+.prologue-comms .comms-choice {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: calc(6 * var(--u));
+  padding: 0 calc(28 * var(--u));
+  height: calc(56 * var(--u));
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .5);
+  border-radius: calc(12 * var(--u));
+  background: linear-gradient(180deg, rgba(28, 74, 64, .92), rgba(16, 44, 38, .8));
+  color: #d8fff5;
+  font: calc(24 * var(--u)) / 1 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .12em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.prologue-comms .comms-choice:hover {
+  border-color: rgba(0, 255, 198, .95);
+  background: linear-gradient(180deg, rgba(44, 110, 96, .95), rgba(20, 58, 50, .85));
+}
+
+.comms-choice[hidden] { display: none !important; }
+
+/* 通讯窗上方的两个选项 */
+.prologue-tops {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--th) * var(--u));
+  justify-content: center;
+  align-items: center;
+  gap: calc(var(--gap) * var(--u));
+  pointer-events: none;
+}
+
+.prologue-top {
+  width: calc(var(--tw) * var(--u));
+  height: calc(var(--th) * var(--u));
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .4);
+  border-radius: calc(12 * var(--u));
+  background: linear-gradient(180deg, rgba(24, 58, 54, .85), rgba(12, 32, 30, .7));
+  color: #d8fff5;
+  font: calc(24 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .16em;
+  text-indent: .16em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.prologue-top:hover {
+  border-color: rgba(0, 255, 198, .95);
+  background: linear-gradient(180deg, rgba(40, 96, 86, .95), rgba(18, 50, 44, .85));
+}
+
+/* ---------- 角色立绘层（垫在圆按钮下方） ---------- */
+.tr1-sprites {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.blood-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.blood-mark {
+  position: absolute;
+  width: calc(120 * var(--u));
+  height: calc(120 * var(--u));
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  opacity: .92;
+  pointer-events: none;
+}
+
+.sprite {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sprite img {
+  position: absolute;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sprite-speech-bubble {
+  position: absolute;
+  width: calc(74 * var(--u));
+  height: calc(74 * var(--u));
+  transform: translate(calc(4 * var(--u)), calc(-78 * var(--u)));
+  pointer-events: none;
+  z-index: 9;
+}
+
+.sprite-speech-bubble img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sprite-surprise-alert {
+  position: absolute;
+  transform: translate(calc(16 * var(--u)), calc(-62 * var(--u)));
+  color: #ff3b30;
+  font: 900 calc(34 * var(--u)) / 1 Consolas, "Cascadia Mono", monospace;
+  text-shadow: 0 0 calc(8 * var(--u)) rgba(255, 59, 48, .8);
+  pointer-events: none;
+  z-index: 10;
+  animation: surprise-alert .6s ease-out both;
+}
+
+@keyframes surprise-alert {
+  from { opacity: 0; transform: translate(calc(16 * var(--u)), calc(-62 * var(--u))) scale(.45); }
+  to { opacity: 1; transform: translate(calc(16 * var(--u)), calc(-62 * var(--u))) scale(1); }
+}
+
+/* 1104 面前的红色警戒光：
+   外层 .vision-frame 负责裁切（被子边 / 水箱沿）和混光，内层 .vision 负责扇形与朝向 */
+.vision-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+
+.stage.is-prologue .vision-frame { opacity: 1; }
+
+/* 左看：被被子（那条斜边）挡住，光只留在斜线右侧 */
+.vision-frame.is-left {
+  clip-path: polygon(54% 19%, 61% 50%, 100% 100%, 100% 0);
+}
+
+/* 下看：不越过水箱上沿（那条蓝下划线） */
+.vision-frame.is-down {
+  clip-path: polygon(0 0, 100% 0, 100% 57%, 0 57%);
+}
+
+.vision-frame.is-left .vision-cone {
+  clip-path: polygon(0% 18%, 94% 41%, 94% 59%, 0% 82%);
+}
+
+.vision {
+  position: absolute;
+  transform-origin: 100% 50%;        /* 顶点在角色身上 */
+  pointer-events: none;
+}
+
+.vision-cone {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    rgba(255, 70, 70, 0) 0%,
+    rgba(255, 70, 70, .04) 12%,
+    rgba(255, 70, 70, .16) 32%,
+    rgba(255, 82, 82, .44) 62%,
+    rgba(255, 90, 90, .72) 88%,
+    rgba(255, 96, 96, .84) 100%);
+  /* 近端截平：与 1104 留出空隙，整体成为梯形而不是尖角扇形 */
+  clip-path: polygon(0% 18%, 87% 41%, 87% 59%, 0% 82%);
+  filter: blur(calc(2.4 * var(--u)));
+}
+
+/* ---------- 按钮层 ---------- */
+/* 该层与屋面完全重合，所以按钮的 % 坐标 = roof2.jpg 图片内的 % 坐标 */
+.tr1-hotspots {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  --btn-size: 5.6%;                /* 按钮直径 = 屋面宽度的 5.6% */
+}
+
+.hotspot {
+  position: absolute;
+  width: var(--btn-size);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: transparent url(../assets/basic_botton_f.png) center / contain no-repeat;
+  transition: transform .16s ease, filter .2s ease, opacity .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hotspot[hidden] { display: none; }
+
+/* 鼠标悬停：颜色加深一点 */
+.hotspot:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  filter: brightness(.82) saturate(1.25);
+}
+
+/* 按住鼠标时再深一点、小一点 */
+.hotspot:active {
+  transform: translate(-50%, -50%) scale(.94);
+  filter: brightness(.74) saturate(1.3);
+}
+
+/* 点击过（已标记）：变大一点 + 薄荷绿「圆盘 + 深色外环」
+   两层径向渐变就能画出原图的几何，不用滤镜染色，按钮里的文字也不受影响 */
+.hotspot.is-active {
+  transform: translate(-50%, -50%) scale(1.1);
+  background-image:
+    /* 深色圆环：74%~88% 半径（原图那条缝的位置），外面留一圈亮薄荷做外沿 */
+    radial-gradient(closest-side,
+      rgba(0, 255, 198, 0) 0 73%,
+      var(--mark-ring) 74% 88%,
+      rgba(0, 255, 198, 0) 89%),
+    /* 圆盘底色（内圈 + 外沿） */
+    radial-gradient(closest-side, var(--mark) 0 99%, rgba(0, 255, 198, 0) 100%);
+  background-size: 100% 100%;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  filter: drop-shadow(0 0 calc(10 * var(--u)) var(--mark-glow));
+}
+
+/* 标记过的按钮被悬停：整块压深一档，同样是「颜色加深」的反馈 */
+.hotspot.is-active:hover {
+  --mark: var(--mark-hover);
+  --mark-ring: var(--mark-ring-hover);
+  filter: drop-shadow(0 0 calc(8 * var(--u)) rgba(0, 255, 198, .65));
+}
+
+.hotspot[data-id="new-1"]:not(.is-active) {
+  background-image: none;
+  filter: none;
+}
+
+.hotspot[data-id="new-1"]:not(.is-active)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(255, 86, 86, .82);
+  -webkit-mask: url(../assets/basic_botton_f.png) center / contain no-repeat;
+  mask: url(../assets/basic_botton_f.png) center / contain no-repeat;
+}
+
+.hotspot[data-id="new-1"]:not(.is-active):hover {
+  filter: brightness(.82) saturate(1.2);
+}
+
+.hotspot[data-id="new-1"]:not(.is-active):active {
+  filter: brightness(.74) saturate(1.25);
+}
+
+.hotspot[data-id="new-1"].is-active {
+  --mark: #ff8a8a;
+  --mark-ring: #d86a6a;
+  --mark-hover: #ff9a9a;
+  --mark-ring-hover: #c95757;
+  --mark-glow: rgba(255, 138, 138, .8);
+}
+
+.hotspot[data-id="new-1"].is-active:hover {
+  filter: drop-shadow(0 0 calc(8 * var(--u)) rgba(255, 138, 138, .65));
+}
+
+/* ---------- 点击顺序连线（虚线箭头） ---------- */
+.tr1-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.route-line {
+  fill: none;
+  stroke: var(--route);
+  stroke-width: 8;             /* 视图单位：3000 宽 = 整块屋面 */
+  stroke-dasharray: 22 16;
+  stroke-linecap: round;
+  opacity: .95;
+}
+
+.hotspot:focus-visible {
+  outline: calc(2 * var(--u)) dashed var(--accent);
+  outline-offset: calc(3 * var(--u));
+  border-radius: 50%;
+}
+
+.hotspot.is-disabled {
+  opacity: .35;
+  cursor: default;
+  filter: grayscale(1);
+}
+
+/* ---------- 已选中按钮右上角的「取消」标注（悬停时出现） ---------- */
+.hotspot-cancel {
+  position: absolute;
+  left: 88%;
+  top: 6%;
+  display: none;
+  transform: translate(0, -100%);
+  padding: calc(4 * var(--u)) calc(10 * var(--u));
+  border: calc(1 * var(--u)) solid rgba(0, 255, 198, .5);
+  border-radius: calc(7 * var(--u));
+  background: rgba(8, 22, 26, .92);
+  color: #b9ffe9;
+  font-size: calc(15 * var(--u));
+  line-height: 1;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  pointer-events: auto;              /* 标注自己要点得到 */
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.hotspot.can-cancel:hover .hotspot-cancel { display: block; }
+
+.hotspot-cancel:hover {
+  background: rgba(0, 72, 58, .95);
+  border-color: rgba(0, 255, 198, .95);
+}
+
+/* ---------- 开发模式 ---------- */
+.hotspot-label {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  display: none;
+  transform: translate(-50%, 30%);
+  padding: .18em .6em;
+  border-radius: 999px;
+  background: rgba(8, 20, 26, .85);
+  color: #c8e8f0;
+  font-size: calc(15 * var(--u));
+  letter-spacing: .04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.stage.is-dev .hotspot-label { display: block; }
+.stage.is-dev .hotspot { cursor: grab; }
+.stage.is-dev .hotspot.is-dragging { cursor: grabbing; }
+
+.dev-panel {
+  position: absolute;
+  right: calc(12 * var(--u));
+  bottom: calc(12 * var(--u));
+  z-index: 9;
+  min-width: calc(230 * var(--u));
+  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  border-radius: calc(6 * var(--u));
+  background: rgba(6, 16, 21, .88);
+  border: 1px solid rgba(159, 211, 222, .35);
+  color: #bfe4ee;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: calc(15 * var(--u));
+  line-height: 1.5;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.dev-panel[hidden] { display: none; }
+.dev-panel b { color: #fff; font-weight: 600; }
+
+/* ---------- 结算 / 执行 ---------- */
+.tr1-exec-routes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+
+.stage.is-executing .tr1-exec-routes { display: none; }
+.stage.is-executing .tr1-arrows { opacity: 0; }
+.stage.is-executing .tr1-backdrop { display: block; }
+.stage.is-executing .prologue-frame { display: block; }
+.stage.is-executing .prologue-tops { display: flex; }
+.stage.is-executing .vision-frame { opacity: 1; }
+.stage.is-executing .prologue-comms { display: none; }
+.stage.is-executing .frame-panel:not(.prologue-frame) { display: none !important; }
+
+/* 劝说后的紧急指令：roof 变灰，中央显示倒数与选项 */
+.stage.is-emergency .tr1-roof {
+  filter: grayscale(.48) brightness(.82);
+  transition: filter .25s ease;
+}
+
+.emergency-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(22 * var(--u));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.emergency-head {
+  display: flex;
+  align-items: baseline;
+  gap: calc(22 * var(--u));
+}
+
+.emergency-title {
+  color: #eafff9;
+  font: 700 calc(38 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .18em;
+  text-indent: .18em;
+  text-shadow: 0 0 calc(14 * var(--u)) rgba(0, 235, 205, .45);
+  white-space: nowrap;
+}
+
+.emergency-count {
+  color: #ff4d4d;
+  font: 800 calc(66 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  text-shadow: 0 0 calc(18 * var(--u)) rgba(255, 55, 55, .7);
+}
+
+.emergency-actions {
+  display: flex;
+  gap: calc(22 * var(--u));
+  pointer-events: auto;
+}
+
+.emergency-choice {
+  min-width: calc(150 * var(--u));
+  height: calc(54 * var(--u));
+  padding: 0 calc(24 * var(--u));
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .62);
+  border-radius: calc(9 * var(--u));
+  background: linear-gradient(180deg, rgba(28, 74, 64, .96), rgba(16, 44, 38, .92));
+  color: #d8fff5;
+  font: 700 calc(22 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .2em;
+  text-indent: .2em;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.emergency-choice:hover {
+  border-color: rgba(0, 255, 198, .95);
+  background: linear-gradient(180deg, rgba(44, 110, 96, .98), rgba(20, 58, 50, .94));
+}
+
+.exec-route {
+  fill: none;
+  stroke: #e13b3b;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 calc(4 * var(--u)) rgba(225, 59, 59, .62));
+}
+
+.exec-route.is-climb {
+  stroke: #ff8a24;
+  filter: drop-shadow(0 0 calc(5 * var(--u)) rgba(255, 138, 36, .7));
+}
+
+.exec-route.is-danger {
+  stroke: #ffd34d;
+  stroke-width: 8;
+  filter: drop-shadow(0 0 calc(8 * var(--u)) rgba(255, 211, 77, .95));
+}
+
+.stage.is-executing .edit-panel,
+.stage.is-executing .edit-ring,
+.stage.is-executing .option-bar,
+.stage.is-executing .panel-button,
+.stage.is-executing .k-box {
+  display: none !important;
+}
+
+.stage.is-executing .tr1-hotspots .hotspot {
+  pointer-events: none;
+  cursor: default;
+}
+
+.stage.is-executing .tr1-sprites { z-index: 5; }
+.stage.is-executing .sprite[data-id="K"] { overflow: visible; }
+.stage.is-executing .sprite.is-falling { overflow: visible; }
+.stage.is-executing .tr1-hotspots { display: none !important; }
+.stage.is-executing .sprite[data-id="K"] { z-index: 6; }
+
+.stage.is-executing .tr1-hotspots .hotspot:hover {
+  transform: translate(-50%, -50%);
+  filter: none;
+}
+
+.exec-panel {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  display: none;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+  padding: calc(var(--pad) * var(--u));
+  overflow: hidden;
+  color: #d6fff4;
+  font: calc(25 * var(--u)) / 1.45 "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: .02em;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.stage.is-executing .exec-panel { display: flex; }
+
+.stage.is-executing .exec-title,
+.stage.is-executing .exec-condition,
+.stage.is-executing .exec-status {
+  display: none !important;
+}
+
+.exec-title {
+  flex: 0 0 auto;
+  color: #9ff5dd;
+  font: 700 calc(24 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+
+.exec-condition {
+  flex: 0 0 auto;
+  padding-bottom: calc(8 * var(--u));
+  border-bottom: calc(1 * var(--u)) solid rgba(0, 255, 198, .18);
+  color: rgba(190, 245, 231, .68);
+  font: 600 calc(16 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .08em;
+}
+
+.exec-log {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.exec-choices {
+  flex: 0 0 auto;
+  display: none;
+  flex-wrap: wrap;
+  gap: calc(12 * var(--u));
+  padding: calc(6 * var(--u)) 0;
+}
+
+.exec-choices.is-on {
+  display: flex;
+  pointer-events: auto;
+}
+
+.exec-choice {
+  min-width: calc(140 * var(--u));
+  height: calc(52 * var(--u));
+  padding: 0 calc(24 * var(--u));
+  border: calc(2 * var(--u)) solid rgba(0, 255, 198, .46);
+  border-radius: calc(10 * var(--u));
+  background: linear-gradient(180deg, rgba(28, 74, 64, .94), rgba(16, 44, 38, .88));
+  color: #d8fff5;
+  font: 600 calc(21 * var(--u)) / 1 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  letter-spacing: .22em;
+  text-indent: .22em;
+  text-shadow: 0 0 calc(9 * var(--u)) rgba(0, 255, 198, .28);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.exec-choice:hover {
+  border-color: rgba(0, 255, 198, .95);
+  background: linear-gradient(180deg, rgba(44, 110, 96, .96), rgba(20, 58, 50, .9));
+}
+
+.exec-choice:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.exec-entry {
+  flex: 0 0 auto;
+  color: #c9fff4;
+  text-shadow: 0 0 calc(8 * var(--u)) rgba(0, 255, 198, .12);
+  animation: exec-entry-in .2s ease both;
+}
+
+.exec-entry.is-move { color: #d8fff5; }
+.exec-entry.is-action { color: #ffd36a; }
+.exec-entry.is-wait { color: #ff9b9b; }
+.exec-entry.is-climb { color: #ffad62; }
+.exec-entry.is-muted { color: #809c96; }
+.exec-entry.is-danger { color: #ffd34d; }
+.exec-entry.is-dialogue { color: #c9fff4; }
+.exec-entry.is-man { color: #b5d2c8; }
+.exec-entry.is-combat-sound { color: #b5d2c8; }
+.exec-entry.is-report {
+  font-size: 1.22em;
+  font-weight: 700;
+}
+
+.exec-status {
+  flex: 0 0 auto;
+  min-height: calc(26 * var(--u));
+  padding-top: calc(10 * var(--u));
+  border-top: calc(1 * var(--u)) solid rgba(0, 255, 198, .18);
+  color: #9ff5dd;
+  font: 600 calc(17 * var(--u)) / 1.35 Consolas, "Cascadia Mono", ui-monospace, monospace;
+}
+
+.exec-status.is-wait { color: #ff9b9b; }
+.exec-status.is-done { color: #9ff5dd; }
+.exec-panel.is-danger .exec-status { color: #ffd34d; }
+
+@keyframes exec-entry-in {
+  from { opacity: 0; transform: translateY(calc(4 * var(--u))); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotspot { transition: none; }
+}

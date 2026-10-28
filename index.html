@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Samaritan · ROOF / TR1</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/room-story.css">
+  <link rel="preload" as="image" href="assets/P.png">
+  <link rel="preload" as="image" href="assets/P_side.png">
+  <link rel="preload" as="image" href="assets/P_back.png">
+  <link rel="preload" as="image" href="assets/interaction_bubble.png">
+  <link rel="preload" as="image" href="assets/BB905death.png">
+  <link rel="preload" as="image" href="assets/hq1_on.png">
+  <link rel="preload" as="image" href="assets/hq1_off.jpg">
+  <link rel="preload" as="image" href="assets/hq_key.png">
+  <link rel="preload" as="image" href="assets/paper.png">
+</head>
+<body class="is-booting">
+  <!-- 舞台：固定 16:9 设计稿坐标系（1920 x 1080），随窗口等比缩放 -->
+  <div class="stage is-prologue" id="stage">
+
+    <!-- 背景板：background.png 铺满整个画面 -->
+    <div class="stage-bg" aria-hidden="true"></div>
+
+    <section class="corridor-scene" id="corridorScene" hidden aria-label="走廊">
+      <img class="corridor-background" src="assets/BB_corridor_9.jpg" alt="">
+      <img class="corridor-door corridor-gdoor" id="corridorGdoor901"
+           style="left:19.23%;top:26.64%"
+           src="assets/corridor_gdoor.png" alt="">
+      <img class="corridor-door corridor-gdoor" id="corridorGdoor902"
+           style="left:40.77%;top:26.64%"
+           src="assets/corridor_gdoor.png" alt="">
+      <img class="corridor-door corridor-gdoor" id="corridorGdoor903"
+           style="left:64.38%;top:26.64%"
+           src="assets/corridor_gdoor.png" alt="">
+      <img class="corridor-door corridor-gdoor" id="corridorGdoor904"
+           style="left:86.38%;top:26.64%"
+           src="assets/corridor_gdoor.png" alt="">
+      <img class="corridor-door corridor-sdoor" id="corridorDoorS905"
+           style="left:19.00%;top:66.92%"
+           src="assets/corridor_door_s.png" alt="">
+      <img class="corridor-door corridor-sdoor" id="corridorDoorS906"
+           style="left:41.00%;top:66.92%"
+           src="assets/corridor_door_s.png" alt="">
+      <img class="corridor-door corridor-sdoor corridor-sdoor-907" id="corridorDoorS907"
+           style="left:91.12%;top:65.92%"
+           src="assets/corridor_door_s.png" alt="">
+      <img class="corridor-person" id="corridorPerson"
+           src="assets/P_side.png" alt="" hidden>
+      <img class="room-interaction-bubble" id="corridorInteractionBubble"
+           src="assets/interaction_bubble.png" alt="按 E 互动" hidden>
+      <div class="room-dialogue corridor-dialogue" id="corridorDialogue" hidden>
+        <div class="room-dialogue-name" id="corridorDialogueName" hidden></div>
+        <div class="room-dialogue-text" id="corridorDialogueText" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="hq-scene" id="hqScene" hidden aria-label="901基地">
+      <img class="hq-layer hq-on" src="assets/hq1_on.png" alt="">
+      <img class="hq-layer hq-off" src="assets/hq1_off.jpg" alt="">
+      <img class="hq-key" src="assets/hq_key.png" alt="">
+      <div class="hq-hit-layer" id="hqHitLayer"></div>
+      <button class="hq-action-button hq-leave-button" id="hqLeaveButton"
+              type="button">离开</button>
+      <button class="hq-action-button hq-next-button" id="hqNextButton"
+              type="button" aria-label="进入下一间房间">&gt;</button>
+      <div class="hq-key-preview" id="hqKeyPreview" hidden aria-label="901的钥匙">
+        <img class="hq-key-preview-image" id="hqKeyPreviewImage"
+             src="assets/hq_key.png" alt="">
+      </div>
+      <div class="room-dialogue hq-dialogue" id="hqDialogue" hidden>
+        <div class="room-dialogue-text" id="hqDialogueText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+    </section>
+
+    <div class="game-cover" id="gameCover">
+      <img src="assets/%E5%8D%A0%E4%BD%8D%E5%9B%BE.jpg" alt="游戏封面">
+      <div class="game-debug-jump">
+        <label for="gameDebugInput">调试模式</label>
+        <input id="gameDebugInput" type="text" inputmode="numeric"
+               maxlength="1" autocomplete="off" placeholder="1 / 2">
+      </div>
+      <button class="game-start" id="gameStart" type="button">开始</button>
+      <div class="game-cover-line" id="gameCoverLine" aria-live="polite">……嘿！醒醒！</div>
+    </div>
+
+    <div class="investigation-overlay" id="investigationOverlay" hidden>
+      <aside class="investigation-panel">
+        <div class="investigation-content">
+          <div class="investigation-name" id="investigationName"></div>
+          <img class="investigation-big" id="investigationBig" src="assets/BB905_big.png" alt="">
+          <div class="investigation-info" id="investigationInfo"></div>
+        </div>
+        <button class="investigation-exit" id="investigationExit" type="button">ESC退出</button>
+      </aside>
+    </div>
+
+    <section class="room-scene" id="roomScene" aria-label="905 房间">
+      <div class="room-canvas">
+        <img class="room-layer room-background" src="assets/room_BB905_1.jpg" alt="">
+        <img class="room-layer room-side-door" id="roomSideDoor"
+             src="assets/BB_sdoor.png" alt="">
+        <img class="room-layer room-death" src="assets/BB905death.png" alt="">
+        <img class="room-layer room-carpet" src="assets/carpet.png" alt="">
+        <img class="room-person" id="roomPerson" data-room-character src="assets/P_lie.png" alt="">
+        <img class="room-elder" id="roomElder" data-room-character
+             src="assets/BB905_c.png" alt="">
+        <div class="room-elder-name" id="roomElderName" hidden>905老头</div>
+        <div class="room-elder-speech" id="roomElderSpeech" hidden aria-label="905 正在说话">
+          <img src="assets/speech_bubble.png" alt="">
+        </div>
+        <img class="room-interaction-bubble" id="roomInteractionBubble"
+             src="assets/interaction_bubble.png" hidden alt="按 E 互动">
+        <div class="room-character-choice" id="roomCharacterChoice" hidden>
+          <button type="button" data-action="investigate">W 调查</button>
+          <button type="button" data-action="talk">S 对话</button>
+          <button type="button" data-action="exit">ESC退出</button>
+        </div>
+        <img class="room-layer room-table-chair" src="assets/table_chair.png" alt="">
+        <img class="room-layer room-sofa" src="assets/sofa.png" alt="">
+        <img class="room-layer room-door" id="roomGdoor"
+             src="assets/BB_gdoor.png" alt="">
+      </div>
+      <div class="room-dialogue" id="roomDialogue" hidden>
+        <div class="room-dialogue-name" id="roomDialogueName" hidden></div>
+        <div class="room-dialogue-text" id="roomDialogueText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+      <div class="room-paper" id="roomPaper" hidden role="button" aria-label="纸质名片">
+        <img src="assets/paper.png" alt="">
+      </div>
+    </section>
+
+    <!-- TR1 面板：左上角，占画面宽高各 60% -->
+    <section class="tr1" id="tr1" aria-label="天台面板 TR1">
+
+      <!-- roof2.jpg 铺满面板内部（留出边框线宽度） -->
+      <div class="tr1-roof" id="tr1Roof">
+        <!-- 四个按钮由 js/config.js 生成 -->
+        <div class="tr1-hotspots" id="hotspots"></div>
+      </div>
+
+      <!-- UI_TR1.png 盖在最上层：边框线 + 顶部装饰缺口的透明素材 -->
+      <img class="tr1-frame" src="assets/UI_TR1.png" alt="" aria-hidden="true">
+    </section>
+
+    <!-- 开发模式下的坐标读数面板（仅在 setDevMode(true) 时出现） -->
+    <div class="dev-panel" id="devPanel" hidden></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/room-story.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

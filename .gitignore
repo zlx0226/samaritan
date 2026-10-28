@@ -1,0 +1,7 @@
+# Local scratch and browser test artifacts
+work/
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
