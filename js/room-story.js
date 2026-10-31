@@ -314,6 +314,13 @@
     }
   }
 
+  function setAnalysisPipeline(activeIndex, allComplete = false) {
+    document.querySelectorAll('.analysis-pipeline-step').forEach((step, index) => {
+      step.classList.toggle('is-active', !allComplete && index === activeIndex);
+      step.classList.toggle('is-complete', allComplete || index < activeIndex);
+    });
+  }
+
   function renderAnalysisTranscript(count, showLinks) {
     const transcript = document.getElementById('analysisTranscript');
     if (!transcript) return;
@@ -352,6 +359,7 @@
     if (systemStatus) systemStatus.textContent = 'STANDBY';
     if (signalState) signalState.textContent = 'IDLE';
     if (transcript) transcript.classList.remove('is-typing');
+    setAnalysisPipeline(-1);
     desktopScene.hidden = true;
     analysisScene.hidden = false;
     window.dispatchEvent(new CustomEvent('game:analysis-open', {
@@ -386,6 +394,7 @@
     if (systemStatus) systemStatus.textContent = 'COMPLETE';
     if (signalState) signalState.textContent = 'LOCKED';
     if (transcript) transcript.classList.remove('is-typing');
+    setAnalysisPipeline(-1, true);
     renderAnalysisTranscript(analysisTranscriptChars.length, true);
   }
 
@@ -422,12 +431,15 @@
     }
     if (systemStatus) systemStatus.textContent = 'PROCESSING';
     if (signalState) signalState.textContent = 'LIVE';
+    setAnalysisPipeline(0);
 
     analysisProgress.timers.push(setTimeout(() => {
       scene.classList.add('is-moved');
+      setAnalysisPipeline(1);
     }, 1000));
 
     analysisProgress.timers.push(setTimeout(() => {
+      setAnalysisPipeline(2);
       if (copy) copy.hidden = false;
       let dotCount = 1;
       if (dots) dots.textContent = '.';
@@ -449,6 +461,7 @@
         scene.classList.add('is-frozen');
         if (systemStatus) systemStatus.textContent = 'FROZEN';
         if (signalState) signalState.textContent = 'LOCKED';
+        setAnalysisPipeline(3);
       }, 3000));
       analysisProgress.timers.push(setTimeout(completeAnalysisPlayback, 4000));
     }, 2000));
