@@ -277,6 +277,60 @@ window.ROOF_UI_CONFIG = {
   ],
   hqInteractionDebugVisible: false,
 
+  /* hq2 点击区域：[左, 上, 右, 下]，单位是 1920×1080 设计画布的比例（%）。
+     当前只显示调试框和悬停效果，点击逻辑尚未绑定。 */
+  hq2Interactions: [
+    {
+      id: 'server',
+      label: '左侧服务器',
+      areas: [[0.0, 8.0, 21.0, 100.0]],
+      lines: [
+        '（这是……服务器！）',
+        '（总感觉是不多见的东西）',
+        '（有需求的话，可以做到很多事吧）'
+      ]
+    },
+    {
+      id: 'monitor',
+      label: '显示器屏幕',
+      areas: [[37.2, 14.2000, 63, 42]],
+      action: 'open-desktop'
+    },
+    {
+      id: 'phone',
+      label: '手机',
+      areas: [[70.4745, 50.6250, 78.6907, 59.2188]],
+      action: 'open-phone'
+    }
+  ],
+  hq2InteractionDebugVisible: false,
+
+  /* 电脑桌面布局：
+     left / top / width / height 为 1920×1080 设计画布百分比；
+     gap / padding / 字号使用设计像素，会随舞台统一缩放。 */
+  desktopUI: {
+    apps: {
+      left: 6,
+      top: 8,
+      width: 10.8,
+      gap: 103.68
+    },
+    task: {
+      left: 6,
+      top: 40,
+      width: 88,
+      height: 52,
+      padding: 28,
+      titleSize: 40,
+      textSize: 28
+    },
+    exit: {
+      right: 3.5,
+      bottom: 2.5,
+      fontSize: 22
+    }
+  },
+
   plot0: [
     '老头：哦！你终于醒了！',
     '……',

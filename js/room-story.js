@@ -12,6 +12,72 @@
     keyTaken: false,
     corridor901Locked: false
   };
+  const phoneProgress = {
+    selected: false,
+    accepted: false
+  };
+  const phoneTask = {
+    id: 'intercept-bb905-bb1001-bb1104',
+    risk: '高危',
+    targets: ['BB905', 'BB1001', 'BB1104']
+  };
+  const desktopTaskProgress = {
+    selected: false,
+    analyzing: false
+  };
+  const storyProgress = {
+    phoneIntroSeen: false,
+    phoneSceneIntroSeen: false,
+    computerIntroSeen: false,
+    postTaskComputerIntroSeen: false,
+    computerExitIntroSeen: false
+  };
+  const analysisProgress = {
+    running: false,
+    started: false,
+    complete: false,
+    timers: [],
+    typeTimer: null,
+    dotTimer: null
+  };
+  const analysisTranscriptTokens = [
+    { text: '毛仔', link: true },
+    { text: '，' },
+    { text: '你' },
+    { text: '想想' },
+    { text: '，那' },
+    { text: '老太', link: true },
+    { text: '没出' },
+    { text: '三日' },
+    { text: '就' },
+    { text: '咽气了' },
+    { text: '，那' },
+    { text: '老头', link: true },
+    { text: '花得完' },
+    { text: '那' },
+    { text: '一万多块钱' },
+    { text: '吗？' },
+    { text: '我们' },
+    { text: '叫他' },
+    { text: '破财消灾' },
+    { text: '，把' },
+    { text: '钱' },
+    { text: '追回来' },
+    { text: '，再' },
+    { text: '把他' },
+    { text: '杀了。' },
+    { text: '老大' },
+    { text: '息了' },
+    { text: '怒' },
+    { text: '，就' },
+    { text: '不会' },
+    { text: '砍' },
+    { text: '我们的头了！' }
+  ];
+  const analysisTranscriptText = analysisTranscriptTokens
+    .map((token) => token.text)
+    .join('');
+  const analysisTranscriptChars = Array.from(analysisTranscriptText);
 
   function pointInPolygon(p, poly) {
     let inside = false;
@@ -48,9 +114,15 @@
 
   function enterHqBase() {
     const hqScene = document.getElementById('hqScene');
+    const hq2Scene = document.getElementById('hq2Scene');
+    const desktopScene = document.getElementById('desktopScene');
+    const phoneScene = document.getElementById('phoneScene');
     const corridorScene = document.getElementById('corridorScene');
     const roomScene = document.getElementById('roomScene');
     if (!hqScene) return;
+    if (hq2Scene) hq2Scene.hidden = true;
+    if (desktopScene) desktopScene.hidden = true;
+    if (phoneScene) phoneScene.hidden = true;
     if (corridorScene) corridorScene.hidden = true;
     if (roomScene) roomScene.hidden = true;
     const corridorPerson = document.getElementById('corridorPerson');
@@ -58,6 +130,413 @@
     hqScene.hidden = false;
     syncHqKey();
     startHqFlicker(hqScene);
+  }
+
+  function enterHq2Base() {
+    const hq2Scene = document.getElementById('hq2Scene');
+    if (!hq2Scene) return;
+    const hqScene = document.getElementById('hqScene');
+    const desktopScene = document.getElementById('desktopScene');
+    const phoneScene = document.getElementById('phoneScene');
+    const corridorScene = document.getElementById('corridorScene');
+    const roomScene = document.getElementById('roomScene');
+    if (hqScene) hqScene.hidden = true;
+    if (desktopScene) desktopScene.hidden = true;
+    if (phoneScene) phoneScene.hidden = true;
+    if (corridorScene) corridorScene.hidden = true;
+    if (roomScene) roomScene.hidden = true;
+    const corridorPerson = document.getElementById('corridorPerson');
+    if (corridorPerson) corridorPerson.hidden = true;
+    hq2Scene.hidden = false;
+    syncPhoneState();
+  }
+
+  function showHq2() {
+    const hqScene = document.getElementById('hqScene');
+    const hq2Scene = document.getElementById('hq2Scene');
+    const desktopScene = document.getElementById('desktopScene');
+    const phoneScene = document.getElementById('phoneScene');
+    if (!hqScene || !hq2Scene) return;
+    hqScene.hidden = true;
+    if (desktopScene) desktopScene.hidden = true;
+    if (phoneScene) phoneScene.hidden = true;
+    hq2Scene.hidden = false;
+    syncPhoneState();
+    window.dispatchEvent(new CustomEvent('game:hq-room-change', {
+      detail: { from: '901', to: '901-inner' }
+    }));
+  }
+
+  function showHq1() {
+    const hqScene = document.getElementById('hqScene');
+    const hq2Scene = document.getElementById('hq2Scene');
+    const desktopScene = document.getElementById('desktopScene');
+    const phoneScene = document.getElementById('phoneScene');
+    if (!hqScene || !hq2Scene || hq2Scene.hidden) return;
+    hq2Scene.hidden = true;
+    if (desktopScene) desktopScene.hidden = true;
+    if (phoneScene) phoneScene.hidden = true;
+    hqScene.hidden = false;
+    syncHqKey();
+    window.dispatchEvent(new CustomEvent('game:hq-room-change', {
+      detail: { from: '901-inner', to: '901' }
+    }));
+  }
+
+  function applyDesktopLayout() {
+    const scene = document.getElementById('desktopScene');
+    const layout = CFG.desktopUI;
+    if (!scene || !layout || !layout.apps || !layout.task || !layout.exit) return;
+    scene.style.setProperty('--desktop-apps-left', layout.apps.left + '%');
+    scene.style.setProperty('--desktop-apps-top', layout.apps.top + '%');
+    scene.style.setProperty('--desktop-app-width', layout.apps.width + '%');
+    scene.style.setProperty('--desktop-apps-gap', layout.apps.gap);
+    scene.style.setProperty('--desktop-task-left', layout.task.left + '%');
+    scene.style.setProperty('--desktop-task-top', layout.task.top + '%');
+    scene.style.setProperty('--desktop-task-width', layout.task.width + '%');
+    scene.style.setProperty('--desktop-task-height', layout.task.height + '%');
+    scene.style.setProperty('--desktop-task-padding', layout.task.padding);
+    scene.style.setProperty('--desktop-task-title-size', layout.task.titleSize);
+    scene.style.setProperty('--desktop-task-text-size', layout.task.textSize);
+    scene.style.setProperty('--desktop-exit-right', layout.exit.right + '%');
+    scene.style.setProperty('--desktop-exit-bottom', layout.exit.bottom + '%');
+    scene.style.setProperty('--desktop-exit-font-size', layout.exit.fontSize);
+  }
+
+  function showDesktop() {
+    const hq2Scene = document.getElementById('hq2Scene');
+    const desktopScene = document.getElementById('desktopScene');
+    const phoneScene = document.getElementById('phoneScene');
+    const desktopTask = document.getElementById('desktopAcceptedTask');
+    if (!hq2Scene || !desktopScene || hq2Scene.hidden) return;
+    if (phoneScene) phoneScene.hidden = true;
+    hq2Scene.hidden = true;
+    desktopScene.hidden = false;
+    if (desktopTask && phoneProgress.accepted) desktopTask.hidden = false;
+    window.dispatchEvent(new CustomEvent('game:desktop-open', {
+      detail: { from: 'hq2' }
+    }));
+  }
+
+  function openComputerWithIntro() {
+    const lines = [];
+    if (phoneProgress.accepted && !storyProgress.postTaskComputerIntroSeen) {
+      storyProgress.postTaskComputerIntroSeen = true;
+      lines.push('（电脑……说的是这个吧）');
+    }
+    if (!storyProgress.computerIntroSeen) {
+      storyProgress.computerIntroSeen = true;
+      lines.push(
+        '（我一走近，就开机了？）',
+        '（感觉在被它注视）'
+      );
+    }
+    if (!lines.length) {
+      showDesktop();
+      return;
+    }
+    showHqInteractionDialogue(lines, () => showDesktop(), {
+      sceneId: 'hq2Scene',
+      boxId: 'hq2Dialogue',
+      textId: 'hq2DialogueText'
+    });
+  }
+
+  function openPhoneWithIntro() {
+    if (storyProgress.phoneIntroSeen) {
+      showPhone();
+      showPhoneSceneIntro();
+      return;
+    }
+    storyProgress.phoneIntroSeen = true;
+    showHqInteractionDialogue([
+      '（这是……手机！）',
+      '（谁的手机？）',
+      '（有消息？）'
+    ], () => {
+      showPhone();
+      showPhoneSceneIntro();
+    }, {
+      sceneId: 'hq2Scene',
+      boxId: 'hq2Dialogue',
+      textId: 'hq2DialogueText'
+    });
+  }
+
+  function showPhoneSceneIntro() {
+    if (storyProgress.phoneSceneIntroSeen) return;
+    storyProgress.phoneSceneIntroSeen = true;
+    showHqInteractionDialogue([
+      '（这是什么？）',
+      '（BB905不就是刚才的老头家吗？）',
+      '（这是在说……他涉及了什么高危的事件吗？）'
+    ], null, {
+      sceneId: 'phoneScene',
+      boxId: 'phoneDialogue',
+      textId: 'phoneDialogueText'
+    });
+  }
+
+  function hideDesktop() {
+    const hq2Scene = document.getElementById('hq2Scene');
+    const desktopScene = document.getElementById('desktopScene');
+    if (!hq2Scene || !desktopScene || desktopScene.hidden) return;
+    desktopScene.hidden = true;
+    hq2Scene.hidden = false;
+    syncPhoneState();
+    window.dispatchEvent(new CustomEvent('game:desktop-close', {
+      detail: { to: 'hq2' }
+    }));
+  }
+
+  function buildAnalysisSpectrum() {
+    const container = document.getElementById('analysisSpectrogramBars');
+    if (!container || container.children.length) return;
+    for (let index = 0; index < 44; index += 1) {
+      const bar = document.createElement('i');
+      bar.style.setProperty('--bar-height', (24 + (index * 37) % 70) + '%');
+      bar.style.setProperty('--bar-speed', (0.52 + (index * 13) % 54 / 100) + 's');
+      bar.style.setProperty('--bar-delay', '-' + ((index * 17) % 67 / 100) + 's');
+      container.appendChild(bar);
+    }
+  }
+
+  function clearAnalysisTimers() {
+    analysisProgress.timers.forEach((timer) => clearTimeout(timer));
+    analysisProgress.timers = [];
+    if (analysisProgress.typeTimer) {
+      clearInterval(analysisProgress.typeTimer);
+      analysisProgress.typeTimer = null;
+    }
+    if (analysisProgress.dotTimer) {
+      clearInterval(analysisProgress.dotTimer);
+      analysisProgress.dotTimer = null;
+    }
+  }
+
+  function renderAnalysisTranscript(count, showLinks) {
+    const transcript = document.getElementById('analysisTranscript');
+    if (!transcript) return;
+    if (!showLinks) {
+      transcript.textContent = analysisTranscriptChars.slice(0, count).join('');
+      return;
+    }
+    transcript.textContent = '';
+    analysisTranscriptTokens.slice(0, count).forEach((token) => {
+      const span = document.createElement('span');
+      span.textContent = token.text;
+      if (showLinks && token.link) span.classList.add('analysis-link');
+      transcript.appendChild(span);
+    });
+  }
+
+  function showAnalysisEmpty() {
+    const desktopScene = document.getElementById('desktopScene');
+    const analysisScene = document.getElementById('analysisScene');
+    const empty = document.getElementById('analysisEmpty');
+    const player = document.getElementById('analysisPlayer');
+    if (!desktopScene || !analysisScene || desktopScene.hidden) return;
+    clearAnalysisTimers();
+    analysisProgress.running = false;
+    analysisScene.classList.remove('is-moved', 'is-frozen', 'is-finished');
+    if (empty) empty.hidden = false;
+    if (player) player.hidden = true;
+    desktopScene.hidden = true;
+    analysisScene.hidden = false;
+    window.dispatchEvent(new CustomEvent('game:analysis-open', {
+      detail: { state: 'empty' }
+    }));
+  }
+
+  function completeAnalysisPlayback() {
+    const scene = document.getElementById('analysisScene');
+    const copy = document.getElementById('analysisCopy');
+    const audioLabel = document.getElementById('analysisAudioLabel');
+    const dots = document.getElementById('analysisConvertingDots');
+    const convertingLabel = document.getElementById('analysisConvertingLabel');
+    clearAnalysisTimers();
+    analysisProgress.running = false;
+    analysisProgress.complete = true;
+    if (scene) scene.classList.add('is-moved', 'is-frozen', 'is-finished');
+    if (copy) copy.hidden = false;
+    if (audioLabel) audioLabel.hidden = false;
+    if (convertingLabel) convertingLabel.textContent = '转换完成：';
+    if (dots) {
+      dots.textContent = '';
+      dots.hidden = true;
+    }
+    renderAnalysisTranscript(analysisTranscriptChars.length, true);
+  }
+
+  function startAnalysisPlayback() {
+    const scene = document.getElementById('analysisScene');
+    const empty = document.getElementById('analysisEmpty');
+    const player = document.getElementById('analysisPlayer');
+    const copy = document.getElementById('analysisCopy');
+    const audioLabel = document.getElementById('analysisAudioLabel');
+    const transcript = document.getElementById('analysisTranscript');
+    const dots = document.getElementById('analysisConvertingDots');
+    const convertingLabel = document.getElementById('analysisConvertingLabel');
+    if (!scene || !player) return;
+    clearAnalysisTimers();
+    analysisProgress.running = true;
+    analysisProgress.complete = false;
+    scene.classList.remove('is-moved', 'is-frozen', 'is-finished');
+    if (empty) empty.hidden = true;
+    player.hidden = false;
+    if (copy) copy.hidden = true;
+    if (audioLabel) audioLabel.hidden = true;
+    if (transcript) transcript.textContent = '';
+    if (convertingLabel) convertingLabel.textContent = '转换中';
+    if (dots) {
+      dots.textContent = '.';
+      dots.hidden = false;
+    }
+
+    analysisProgress.timers.push(setTimeout(() => {
+      scene.classList.add('is-moved');
+    }, 1000));
+
+    analysisProgress.timers.push(setTimeout(() => {
+      if (copy) copy.hidden = false;
+      let dotCount = 1;
+      if (dots) dots.textContent = '.';
+      analysisProgress.dotTimer = setInterval(() => {
+        dotCount = dotCount % 3 + 1;
+        if (dots) dots.textContent = '.'.repeat(dotCount);
+      }, 260);
+
+      let charCount = 1;
+      renderAnalysisTranscript(charCount, false);
+      analysisProgress.typeTimer = setInterval(() => {
+        if (charCount >= analysisTranscriptChars.length) return;
+        charCount += 1;
+        renderAnalysisTranscript(charCount, false);
+      }, 58);
+
+      analysisProgress.timers.push(setTimeout(() => {
+        scene.classList.add('is-frozen');
+      }, 3000));
+      analysisProgress.timers.push(setTimeout(completeAnalysisPlayback, 4000));
+    }, 2000));
+  }
+
+  function showAnalysisTask() {
+    const desktopScene = document.getElementById('desktopScene');
+    const analysisScene = document.getElementById('analysisScene');
+    const empty = document.getElementById('analysisEmpty');
+    const player = document.getElementById('analysisPlayer');
+    if (!desktopScene || !analysisScene || desktopScene.hidden) return;
+    analysisProgress.started = true;
+    const taskGuide = document.getElementById('desktopTaskGuide');
+    if (taskGuide) taskGuide.hidden = true;
+    if (empty) empty.hidden = true;
+    if (player) player.hidden = false;
+    desktopScene.hidden = true;
+    analysisScene.hidden = false;
+    if (analysisProgress.complete) {
+      completeAnalysisPlayback();
+    } else {
+      startAnalysisPlayback();
+    }
+    window.dispatchEvent(new CustomEvent('game:analysis-open', {
+      detail: { state: 'playing' }
+    }));
+  }
+
+  function hideAnalysis() {
+    const desktopScene = document.getElementById('desktopScene');
+    const analysisScene = document.getElementById('analysisScene');
+    if (!desktopScene || !analysisScene || analysisScene.hidden) return;
+    if (analysisProgress.running) completeAnalysisPlayback();
+    analysisScene.hidden = true;
+    desktopScene.hidden = false;
+    window.dispatchEvent(new CustomEvent('game:analysis-close', {
+      detail: { to: 'desktop' }
+    }));
+  }
+
+  function requestDesktopExit() {
+    if (storyProgress.computerExitIntroSeen) {
+      hideDesktop();
+      return;
+    }
+    storyProgress.computerExitIntroSeen = true;
+    hideDesktop();
+    showHqInteractionDialogue(['（又自己关机了！）'], null, {
+      sceneId: 'hq2Scene',
+      boxId: 'hq2Dialogue',
+      textId: 'hq2DialogueText'
+    });
+  }
+
+  function syncPhoneState() {
+    const phoneImage = document.querySelector('.hq2-phone');
+    const bubble = document.querySelector('.hq2-phone-bubble');
+    const option = document.getElementById('phoneIntercept');
+    const accept = document.getElementById('phoneAccept');
+    const desktopTask = document.getElementById('desktopAcceptedTask');
+    const desktopPrompt = document.getElementById('desktopMissionPrompt');
+    const taskHint = document.getElementById('phoneTaskHint');
+    const taskGuide = document.getElementById('desktopTaskGuide');
+    if (phoneImage) {
+      phoneImage.src = phoneProgress.accepted
+        ? 'assets/phone_off.png'
+        : 'assets/phone_on.png';
+    }
+    if (bubble) bubble.hidden = phoneProgress.accepted;
+    if (option) option.hidden = phoneProgress.accepted;
+    if (option) {
+      option.classList.toggle(
+        'is-selected',
+        phoneProgress.selected && !phoneProgress.accepted
+      );
+    }
+    if (accept) accept.hidden = true;
+    if (taskHint) taskHint.hidden = !phoneProgress.accepted;
+    if (desktopTask && !phoneProgress.accepted) desktopTask.hidden = true;
+    if (desktopPrompt) desktopPrompt.hidden = phoneProgress.accepted;
+    if (taskGuide) {
+      taskGuide.hidden = !phoneProgress.accepted || analysisProgress.started;
+    }
+  }
+
+  function showPhone() {
+    const hq2Scene = document.getElementById('hq2Scene');
+    const phoneScene = document.getElementById('phoneScene');
+    const desktopScene = document.getElementById('desktopScene');
+    if (!hq2Scene || !phoneScene || hq2Scene.hidden) return;
+    if (desktopScene) desktopScene.hidden = true;
+    phoneProgress.selected = false;
+    hq2Scene.hidden = true;
+    phoneScene.hidden = false;
+    syncPhoneState();
+    window.dispatchEvent(new CustomEvent('game:phone-open', {
+      detail: { from: 'hq2' }
+    }));
+  }
+
+  function hidePhone() {
+    const hq2Scene = document.getElementById('hq2Scene');
+    const phoneScene = document.getElementById('phoneScene');
+    if (!hq2Scene || !phoneScene || phoneScene.hidden) return;
+    phoneProgress.selected = false;
+    phoneScene.hidden = true;
+    hq2Scene.hidden = false;
+    syncPhoneState();
+    window.dispatchEvent(new CustomEvent('game:phone-close', {
+      detail: { to: 'hq2' }
+    }));
+  }
+
+  function acceptPhoneTask() {
+    if (!phoneProgress.selected || phoneProgress.accepted) return;
+    phoneProgress.selected = false;
+    phoneProgress.accepted = true;
+    syncPhoneState();
+    window.dispatchEvent(new CustomEvent('game:phone-task-accepted', {
+      detail: { targets: ['BB905', 'BB1001', 'BB1104'] }
+    }));
   }
 
   function syncHqKey() {
@@ -108,10 +587,10 @@
     });
   }
 
-  function showHqInteractionDialogue(lines, onEnd) {
-    const scene = document.getElementById('hqScene');
-    const box = document.getElementById('hqDialogue');
-    const text = document.getElementById('hqDialogueText');
+  function showHqInteractionDialogue(lines, onEnd, target = {}) {
+    const scene = document.getElementById(target.sceneId || 'hqScene');
+    const box = document.getElementById(target.boxId || 'hqDialogue');
+    const text = document.getElementById(target.textId || 'hqDialogueText');
     if (!scene || !box || !text || !lines || !lines.length || !box.hidden) return;
 
     let index = 0;
@@ -122,7 +601,7 @@
     scene.classList.add('is-dialogue');
     box.hidden = false;
     text.textContent = '';
-    document.querySelectorAll('.hq-hit-area.is-linked-hover')
+    scene.querySelectorAll('.hq-hit-area.is-linked-hover')
       .forEach((element) => element.classList.remove('is-linked-hover'));
 
     const finishTyping = () => {
@@ -268,6 +747,55 @@
     });
   }
 
+  function buildHq2InteractionAreas() {
+    const layer = document.getElementById('hq2HitLayer');
+    const interactions = CFG.hq2Interactions || [];
+    if (!layer || !interactions.length) return;
+    layer.innerHTML = '';
+    interactions.forEach((interaction) => {
+      (interaction.areas || []).forEach((rect, index) => {
+        const element = document.createElement('div');
+        element.className = 'hq-hit-area';
+        element.dataset.id = interaction.id;
+        element.dataset.label =
+          interaction.label + (interaction.areas.length > 1 ? ' ' + (index + 1) : '');
+        if (CFG.hq2InteractionDebugVisible === true) {
+          element.classList.add('is-debug');
+        }
+        if (interaction.lines && interaction.lines.length) {
+          element.addEventListener('click', (event) => {
+            event.stopPropagation();
+            showHqInteractionDialogue(interaction.lines, null, {
+              sceneId: 'hq2Scene',
+              boxId: 'hq2Dialogue',
+              textId: 'hq2DialogueText'
+            });
+          });
+        }
+        if (interaction.action === 'open-desktop') {
+          element.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openComputerWithIntro();
+          });
+        }
+        if (interaction.action === 'open-phone') {
+          element.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openPhoneWithIntro();
+          });
+        }
+        if (Number.isFinite(interaction.zIndex)) {
+          element.style.zIndex = String(interaction.zIndex);
+        }
+        element.style.left = rect[0] + '%';
+        element.style.top = rect[1] + '%';
+        element.style.width = (rect[2] - rect[0]) + '%';
+        element.style.height = (rect[3] - rect[1]) + '%';
+        layer.appendChild(element);
+      });
+    });
+  }
+
   function initGameCover() {
     const cover = document.getElementById('gameCover');
     const button = document.getElementById('gameStart');
@@ -283,16 +811,112 @@
     if (!cover || !button) return;
     buildCorridorCollisionDebug();
     buildHqInteractionAreas();
+    buildHq2InteractionAreas();
+    applyDesktopLayout();
+    buildAnalysisSpectrum();
+    syncPhoneState();
     const leaveButton = document.getElementById('hqLeaveButton');
     const nextButton = document.getElementById('hqNextButton');
+    const backButton = document.getElementById('hq2BackButton');
+    const desktopApps = Array.from(document.querySelectorAll('.desktop-app'));
     if (leaveButton) leaveButton.addEventListener('click', leaveHqBase);
-    if (nextButton) {
-      nextButton.addEventListener('click', () => {
-        window.dispatchEvent(new CustomEvent('game:hq-next-room', {
-          detail: { from: '901' }
+    if (nextButton) nextButton.addEventListener('click', showHq2);
+    if (backButton) backButton.addEventListener('click', showHq1);
+    desktopApps.forEach((app) => {
+      app.addEventListener('click', () => {
+        desktopApps.forEach((other) => other.classList.remove('is-selected'));
+        app.classList.add('is-selected');
+      });
+      app.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        const task = app.dataset.taskId ? {
+          id: app.dataset.taskId,
+          risk: app.dataset.taskRisk || '',
+          targets: phoneTask.targets.slice()
+        } : null;
+        window.dispatchEvent(new CustomEvent('game:desktop-app-open', {
+          detail: { app: app.dataset.app, task }
+        }));
+        if (app.dataset.app === 'analyze') {
+          if (app.dataset.taskState === 'analyzing') {
+            showAnalysisTask();
+          } else {
+            showAnalysisEmpty();
+          }
+        }
+      });
+    });
+    const analysisBackButton = document.getElementById('analysisBackButton');
+    if (analysisBackButton) {
+      analysisBackButton.addEventListener('click', hideAnalysis);
+    }
+    const acceptedTask = document.getElementById('desktopAcceptedTask');
+    const analyzeButton = document.getElementById('desktopAnalyzeButton');
+    const taskStatus = document.getElementById('desktopTaskStatus');
+    if (acceptedTask) {
+      acceptedTask.addEventListener('click', () => {
+        if (!phoneProgress.accepted || desktopTaskProgress.analyzing) return;
+        desktopTaskProgress.selected = true;
+        acceptedTask.classList.add('is-selected');
+        acceptedTask.setAttribute('aria-selected', 'true');
+        if (analyzeButton) analyzeButton.hidden = false;
+        window.dispatchEvent(new CustomEvent('game:desktop-task-select', {
+          detail: { task: phoneTask }
         }));
       });
     }
+    if (analyzeButton) {
+      analyzeButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (!desktopTaskProgress.selected) return;
+        desktopTaskProgress.analyzing = true;
+        analyzeButton.hidden = true;
+        if (taskStatus) taskStatus.hidden = false;
+        const analyzeApp = desktopApps.find((app) => app.dataset.app === 'analyze');
+        if (analyzeApp) {
+          analyzeApp.dataset.taskId = phoneTask.id;
+          analyzeApp.dataset.taskRisk = phoneTask.risk;
+          analyzeApp.dataset.taskState = 'analyzing';
+        }
+        window.dispatchEvent(new CustomEvent('game:desktop-task-analyze', {
+          detail: {
+            app: 'analyze',
+            task: phoneTask
+          }
+        }));
+      });
+    }
+    const phoneOption = document.getElementById('phoneIntercept');
+    const phoneAccept = document.getElementById('phoneAccept');
+    if (phoneOption) {
+      phoneOption.addEventListener('click', () => {
+        phoneProgress.selected = true;
+        phoneOption.classList.add('is-selected');
+        if (phoneAccept) phoneAccept.hidden = false;
+      });
+    }
+    if (phoneAccept) phoneAccept.addEventListener('click', acceptPhoneTask);
+    window.addEventListener('keydown', (event) => {
+      const desktopScene = document.getElementById('desktopScene');
+      const phoneScene = document.getElementById('phoneScene');
+      const analysisScene = document.getElementById('analysisScene');
+      if (event.key === 'Escape' && analysisScene && !analysisScene.hidden) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        hideAnalysis();
+        return;
+      }
+      if (event.key === 'Escape' && phoneScene && !phoneScene.hidden) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        hidePhone();
+        return;
+      }
+      if (event.key !== 'Escape' || !desktopScene || desktopScene.hidden) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      requestDesktopExit();
+    }, true);
     let started = false;
     const demoStartInComms = false;
     button.addEventListener('click', () => {
@@ -330,7 +954,7 @@
       /* 演示模式：暂时跳过 905 前置剧情，直接进入旧通讯流程。 */
       if (debugMode === '3') {
         cover.hidden = true;
-        enterHqBase();
+        enterHq2Base();
         return;
       }
       if (demoStartInComms) {

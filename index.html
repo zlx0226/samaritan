@@ -77,12 +77,120 @@
       </div>
     </section>
 
+    <section class="hq2-scene" id="hq2Scene" hidden aria-label="901里间">
+      <img class="hq-layer hq2-background" src="assets/hq2.jpg" alt="">
+      <img class="hq2-phone" src="assets/phone_on.png" alt="">
+      <div class="hq2-phone-bubble" aria-label="手机有新提示">
+        <img src="assets/chat.png" alt="">
+        <span>！</span>
+      </div>
+      <div class="hq-hit-layer hq2-hit-layer" id="hq2HitLayer"></div>
+      <button class="hq-action-button hq2-back-button" id="hq2BackButton"
+              type="button" aria-label="返回901基地">&lt;</button>
+      <div class="room-dialogue hq-dialogue" id="hq2Dialogue" hidden>
+        <div class="room-dialogue-text" id="hq2DialogueText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+    </section>
+
+    <section class="phone-scene" id="phoneScene" hidden aria-label="手机拦截信息">
+      <img class="phone-scene-background" src="assets/phone.png" alt="">
+      <div class="phone-ui">
+        <div class="phone-header">
+          <div class="phone-title">拦截信息</div>
+          <button class="phone-accept" id="phoneAccept" type="button" hidden>接取</button>
+        </div>
+        <div class="phone-separator" aria-hidden="true">
+          <i class="phone-separator-long"></i>
+          <i></i><i></i><i></i>
+        </div>
+        <button class="intercept-card phone-intercept" id="phoneIntercept" type="button">
+          <span class="intercept-risk">高危</span>
+          <span class="intercept-divider"></span>
+          <span class="intercept-targets">BB905住户，BB1001住户，BB1104住户</span>
+        </button>
+        <div class="phone-task-hint" id="phoneTaskHint" hidden>
+          任务详情请查看<span class="phone-computer-word">电脑</span>
+        </div>
+      </div>
+      <div class="room-dialogue hq-dialogue" id="phoneDialogue" hidden>
+        <div class="room-dialogue-text" id="phoneDialogueText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+      <div class="phone-exit-hint">按ESC退出</div>
+    </section>
+
+    <section class="desktop-scene" id="desktopScene" hidden aria-label="电脑桌面">
+      <img class="desktop-background" src="assets/background.png" alt="">
+      <div class="desktop-apps" aria-label="应用程序">
+        <button class="desktop-app" type="button" data-app="monitor" aria-label="监控">
+          <img src="assets/app_monitor.png" alt="">
+        </button>
+        <button class="desktop-app" type="button" data-app="analyze" aria-label="分析">
+          <img src="assets/app_analyze.png" alt="">
+        </button>
+        <button class="desktop-app" type="button" data-app="search" aria-label="搜索">
+          <img src="assets/app_search.png" alt="">
+        </button>
+      </div>
+      <div class="desktop-task">
+        <div class="desktop-task-heading">
+          <div class="desktop-task-title">Mission：</div>
+          <button class="desktop-analyze-button" id="desktopAnalyzeButton"
+                  type="button" hidden>分析</button>
+        </div>
+        <div class="desktop-task-guide" id="desktopTaskGuide" hidden>
+          点击任务投入分析，点击分析软件分析对应任务
+        </div>
+        <div class="desktop-task-text" id="desktopMissionPrompt">
+          请查看<span class="desktop-phone-word">手机</span>
+        </div>
+        <div class="intercept-card desktop-accepted-task" id="desktopAcceptedTask" hidden>
+          <span class="intercept-risk">高危</span>
+          <span class="intercept-divider"></span>
+          <span class="intercept-targets">BB905住户，BB1001住户，BB1104住户</span>
+          <span class="desktop-task-status" id="desktopTaskStatus" hidden>分析中</span>
+        </div>
+      </div>
+      <div class="room-dialogue hq-dialogue" id="desktopDialogue" hidden>
+        <div class="room-dialogue-text" id="desktopDialogueText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+      <div class="desktop-exit-hint">按ESC退出</div>
+    </section>
+
+    <section class="analysis-scene" id="analysisScene" hidden aria-label="分析">
+      <img class="analysis-background" src="assets/background.png" alt="">
+      <div class="analysis-empty" id="analysisEmpty">暂无任务</div>
+      <div class="analysis-player" id="analysisPlayer" hidden>
+        <div class="analysis-spectrogram" id="analysisSpectrogram">
+          <div class="analysis-spectrogram-bars" id="analysisSpectrogramBars"></div>
+        </div>
+        <div class="analysis-audio-label" id="analysisAudioLabel" hidden>音频</div>
+        <div class="analysis-copy" id="analysisCopy" hidden>
+          <div class="analysis-converting">
+            <span id="analysisConvertingLabel">转换中</span><span
+              class="analysis-converting-dots" id="analysisConvertingDots">.</span>
+          </div>
+          <div class="analysis-transcript" id="analysisTranscript"></div>
+        </div>
+      </div>
+      <button class="analysis-back-button" id="analysisBackButton"
+              type="button" aria-label="返回电脑桌面">&lt;</button>
+    </section>
+
     <div class="game-cover" id="gameCover">
       <img src="assets/%E5%8D%A0%E4%BD%8D%E5%9B%BE.jpg" alt="游戏封面">
       <div class="game-debug-jump">
         <label for="gameDebugInput">调试模式</label>
         <input id="gameDebugInput" type="text" inputmode="numeric"
-               maxlength="1" autocomplete="off" placeholder="1 / 2">
+               maxlength="1" autocomplete="off" placeholder="1 / 2 / 3">
       </div>
       <button class="game-start" id="gameStart" type="button">开始</button>
       <div class="game-cover-line" id="gameCoverLine" aria-live="polite">……嘿！醒醒！</div>
