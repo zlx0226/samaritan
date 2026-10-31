@@ -322,10 +322,15 @@
       return;
     }
     transcript.textContent = '';
+    let linkIndex = 1;
     analysisTranscriptTokens.slice(0, count).forEach((token) => {
       const span = document.createElement('span');
       span.textContent = token.text;
-      if (showLinks && token.link) span.classList.add('analysis-link');
+      if (showLinks && token.link) {
+        span.classList.add('analysis-link');
+        span.style.setProperty('--link-delay', (linkIndex * 0.12) + 's');
+        linkIndex += 1;
+      }
       transcript.appendChild(span);
     });
   }
@@ -335,12 +340,18 @@
     const analysisScene = document.getElementById('analysisScene');
     const empty = document.getElementById('analysisEmpty');
     const player = document.getElementById('analysisPlayer');
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
+    const transcript = document.getElementById('analysisTranscript');
     if (!desktopScene || !analysisScene || desktopScene.hidden) return;
     clearAnalysisTimers();
     analysisProgress.running = false;
     analysisScene.classList.remove('is-moved', 'is-frozen', 'is-finished');
     if (empty) empty.hidden = false;
     if (player) player.hidden = true;
+    if (systemStatus) systemStatus.textContent = 'STANDBY';
+    if (signalState) signalState.textContent = 'IDLE';
+    if (transcript) transcript.classList.remove('is-typing');
     desktopScene.hidden = true;
     analysisScene.hidden = false;
     window.dispatchEvent(new CustomEvent('game:analysis-open', {
@@ -354,17 +365,27 @@
     const audioLabel = document.getElementById('analysisAudioLabel');
     const dots = document.getElementById('analysisConvertingDots');
     const convertingLabel = document.getElementById('analysisConvertingLabel');
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
+    const transcript = document.getElementById('analysisTranscript');
     clearAnalysisTimers();
     analysisProgress.running = false;
     analysisProgress.complete = true;
     if (scene) scene.classList.add('is-moved', 'is-frozen', 'is-finished');
     if (copy) copy.hidden = false;
     if (audioLabel) audioLabel.hidden = false;
+    if (audioLabel) {
+      audioLabel.classList.add('analysis-link');
+      audioLabel.style.setProperty('--link-delay', '0s');
+    }
     if (convertingLabel) convertingLabel.textContent = '转换完成：';
     if (dots) {
       dots.textContent = '';
       dots.hidden = true;
     }
+    if (systemStatus) systemStatus.textContent = 'COMPLETE';
+    if (signalState) signalState.textContent = 'LOCKED';
+    if (transcript) transcript.classList.remove('is-typing');
     renderAnalysisTranscript(analysisTranscriptChars.length, true);
   }
 
@@ -377,6 +398,8 @@
     const transcript = document.getElementById('analysisTranscript');
     const dots = document.getElementById('analysisConvertingDots');
     const convertingLabel = document.getElementById('analysisConvertingLabel');
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
     if (!scene || !player) return;
     clearAnalysisTimers();
     analysisProgress.running = true;
@@ -386,12 +409,19 @@
     player.hidden = false;
     if (copy) copy.hidden = true;
     if (audioLabel) audioLabel.hidden = true;
+    if (audioLabel) {
+      audioLabel.classList.remove('analysis-link');
+      audioLabel.style.removeProperty('--link-delay');
+    }
     if (transcript) transcript.textContent = '';
+    if (transcript) transcript.classList.remove('is-typing');
     if (convertingLabel) convertingLabel.textContent = '转换中';
     if (dots) {
       dots.textContent = '.';
       dots.hidden = false;
     }
+    if (systemStatus) systemStatus.textContent = 'PROCESSING';
+    if (signalState) signalState.textContent = 'LIVE';
 
     analysisProgress.timers.push(setTimeout(() => {
       scene.classList.add('is-moved');
@@ -407,6 +437,7 @@
       }, 260);
 
       let charCount = 1;
+      if (transcript) transcript.classList.add('is-typing');
       renderAnalysisTranscript(charCount, false);
       analysisProgress.typeTimer = setInterval(() => {
         if (charCount >= analysisTranscriptChars.length) return;
@@ -416,6 +447,8 @@
 
       analysisProgress.timers.push(setTimeout(() => {
         scene.classList.add('is-frozen');
+        if (systemStatus) systemStatus.textContent = 'FROZEN';
+        if (signalState) signalState.textContent = 'LOCKED';
       }, 3000));
       analysisProgress.timers.push(setTimeout(completeAnalysisPlayback, 4000));
     }, 2000));

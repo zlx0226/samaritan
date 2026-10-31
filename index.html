@@ -167,10 +167,22 @@
 
     <section class="analysis-scene" id="analysisScene" hidden aria-label="分析">
       <img class="analysis-background" src="assets/background.png" alt="">
+      <div class="analysis-field" aria-hidden="true">
+        <span class="analysis-field-scan"></span>
+      </div>
+      <div class="analysis-system-readout" aria-hidden="true">
+        <span>ANALYSIS // AUDIO STREAM</span>
+        <span id="analysisSystemStatus">STANDBY</span>
+      </div>
       <div class="analysis-empty" id="analysisEmpty">暂无任务</div>
       <div class="analysis-player" id="analysisPlayer" hidden>
         <div class="analysis-spectrogram" id="analysisSpectrogram">
           <div class="analysis-spectrogram-bars" id="analysisSpectrogramBars"></div>
+          <div class="analysis-spectrum-scan" aria-hidden="true"></div>
+          <div class="analysis-spectrum-readout" aria-hidden="true">
+            <span>SIGNAL</span>
+            <span id="analysisSignalState">LIVE</span>
+          </div>
         </div>
         <div class="analysis-audio-label" id="analysisAudioLabel" hidden>音频</div>
         <div class="analysis-copy" id="analysisCopy" hidden>
@@ -178,6 +190,7 @@
             <span id="analysisConvertingLabel">转换中</span><span
               class="analysis-converting-dots" id="analysisConvertingDots">.</span>
           </div>
+          <div class="analysis-copy-rule" aria-hidden="true"></div>
           <div class="analysis-transcript" id="analysisTranscript"></div>
         </div>
       </div>
