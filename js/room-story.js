@@ -66,7 +66,7 @@
     { text: '，再' },
     { text: '把他' },
     { text: '杀了。' },
-    { text: '老大' },
+    { text: '老大', link: true },
     { text: '息了' },
     { text: '怒' },
     { text: '，就' },
