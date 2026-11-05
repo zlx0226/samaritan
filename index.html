@@ -7,8 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Samaritan · ROOF / TR1</title>
-  <link rel="stylesheet" href="css/style.css?v=20261031-hud9">
-  <link rel="stylesheet" href="css/room-story.css?v=20261031-hud9">
+  <link rel="stylesheet" href="css/style.css?v=20261105-corridor9">
+  <link rel="stylesheet" href="css/room-story.css?v=20261105-corridor9">
   <link rel="preload" as="image" href="assets/P.png">
   <link rel="preload" as="image" href="assets/P_side.png">
   <link rel="preload" as="image" href="assets/P_back.png">
@@ -49,10 +49,30 @@
       <img class="corridor-door corridor-sdoor corridor-sdoor-907" id="corridorDoorS907"
            style="left:91.12%;top:65.92%"
            src="assets/corridor_door_s.png" alt="">
+      <div class="corridor-elevator-display" id="corridorElevatorDisplay"
+           aria-live="polite" hidden>
+        <span id="corridorElevatorFloor"></span>
+      </div>
+      <img class="corridor-npc corridor-old-man" id="corridorOldMan"
+           src="assets/BB905_side.png" alt="905老头" hidden>
+      <img class="corridor-npc corridor-landlady" id="corridorLandlady"
+           src="assets/BB301_side.png" alt="301包租婆" hidden>
       <img class="corridor-person" id="corridorPerson"
            src="assets/P_side.png" alt="" hidden>
       <img class="room-interaction-bubble" id="corridorInteractionBubble"
            src="assets/interaction_bubble.png" alt="按 E 互动" hidden>
+      <div class="room-character-choice corridor-npc-choice"
+           id="corridorNpcChoice" hidden>
+        <button type="button" data-choice="investigate">W调查</button>
+        <button type="button" data-choice="talk">S对话</button>
+        <button type="button" data-choice="exit">ESC退出</button>
+      </div>
+      <div class="room-character-choice corridor-door-choice"
+           id="corridorDoorChoice" hidden>
+        <button type="button" data-choice="open">W开门</button>
+        <button type="button" data-choice="knock">S敲门</button>
+        <button type="button" data-choice="exit">ESC退出</button>
+      </div>
       <div class="room-dialogue corridor-dialogue" id="corridorDialogue" hidden>
         <div class="room-dialogue-name" id="corridorDialogueName" hidden></div>
         <div class="room-dialogue-text" id="corridorDialogueText" aria-live="polite"></div>
@@ -206,14 +226,59 @@
             <span id="analysisSignalState">LIVE</span>
           </div>
         </div>
-        <div class="analysis-audio-label" id="analysisAudioLabel" hidden>音频</div>
+        <button class="analysis-audio-label" id="analysisAudioLabel"
+                type="button" hidden>音频</button>
         <div class="analysis-copy" id="analysisCopy" hidden>
           <div class="analysis-converting">
             <span id="analysisConvertingLabel">转换中</span><span
               class="analysis-converting-dots" id="analysisConvertingDots">.</span>
           </div>
           <div class="analysis-copy-rule" aria-hidden="true"></div>
-          <div class="analysis-transcript" id="analysisTranscript"></div>
+          <div class="analysis-transcript-line">
+            <span class="analysis-transcript-quote">“</span><span
+              class="analysis-transcript" id="analysisTranscript"></span><span
+              class="analysis-transcript-quote">”</span>
+          </div>
+        </div>
+      </div>
+      <div class="voice-analysis" id="voiceAnalysis" hidden>
+        <div class="voice-analysis-status" id="voiceStatus">
+          <span id="voiceStatusLabel">声纹分析中</span><span
+            class="analysis-converting-dots" id="voiceStatusDots">.</span>
+        </div>
+        <div class="voice-speaker" id="voiceSpeaker">
+          <span class="voice-speaker-primary" id="voiceSpeakerPrimary"></span><span
+            id="voiceSpeakerDetail"></span>
+        </div>
+        <div class="voice-source" id="voiceSource" hidden>音频来源：BB11层</div>
+        <div class="voice-profile-row">
+          <div class="voice-photo-card" id="voicePhotoCard" hidden>
+            <img src="assets/BB1104_photo.jpg" id="voicePhotoImage" alt="">
+            <div class="voice-photo-empty" id="voicePhotoEmpty" hidden>无</div>
+            <div id="voicePhotoName">BB1104_photo</div>
+          </div>
+          <div class="voice-info-card" id="voiceInfoCard" hidden>
+            <div class="voice-card-title">基本信息：</div>
+            <div class="voice-info-fallback" id="voiceInfoFallback" hidden>
+              超出监控范围
+            </div>
+            <div class="voice-info-grid">
+              <div id="voiceInfoGender">性别：男</div>
+              <div id="voiceInfoAge">年龄：22</div>
+              <div id="voiceInfoAddress">住所：BB1104</div>
+              <div id="voiceInfoJob">职业：自由职业</div>
+            </div>
+          </div>
+          <div class="voice-summary-card" id="voiceSummaryCard" hidden>
+            <div class="voice-card-title">摘要：</div>
+            <p id="voiceSummaryText">2068年加入棍斧帮，代号“耗子”。2069年因寻衅滋事罪拘留2个月。2070年开始负责BB楼区域保护费收取及租金债务追讨的工作，被下属称为“豪哥”。（<span class="voice-book-link">彩色书</span>）</p>
+          </div>
+        </div>
+      </div>
+      <div class="room-dialogue analysis-story-dialogue" id="analysisStoryDialogue" hidden>
+        <div class="room-dialogue-text" id="analysisStoryText" aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
         </div>
       </div>
       <button class="analysis-back-button" id="analysisBackButton"
@@ -226,7 +291,7 @@
       <div class="game-debug-jump">
         <label for="gameDebugInput">调试模式</label>
         <input id="gameDebugInput" type="text" inputmode="numeric"
-               maxlength="1" autocomplete="off" placeholder="1 / 2 / 3">
+               maxlength="1" autocomplete="off" placeholder="1 / 2 / 3 / 4">
       </div>
       <button class="game-start" id="gameStart" type="button">开始</button>
       <div class="game-cover-line" id="gameCoverLine" aria-live="polite">……嘿！醒醒！</div>
@@ -298,8 +363,8 @@
     <div class="dev-panel" id="devPanel" hidden></div>
   </div>
 
-  <script src="js/config.js?v=20261031-hud9"></script>
-  <script src="js/room-story.js?v=20261031-hud9"></script>
-  <script src="js/main.js?v=20261031-hud9"></script>
+  <script src="js/config.js?v=20261105-corridor9"></script>
+  <script src="js/room-story.js?v=20261105-corridor9"></script>
+  <script src="js/main.js?v=20261105-corridor9"></script>
 </body>
 </html>

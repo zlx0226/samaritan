@@ -216,6 +216,62 @@ window.ROOF_UI_CONFIG = {
 
   /* 901 点击区域：[左, 上, 右, 下]，单位是 1920×1080 设计画布的比例（%）。
      例如 [25, 50, 75, 80] 表示从画面横向 25% 到 75%、纵向 50% 到 80%。 */
+  /* 主分析完成后第一次离开901触发的走廊时间轴。
+     时间均为毫秒，角色 x/y 与背景使用同一套百分比坐标。 */
+  corridorRitual: {
+    floorTravelMs: 1000,
+    landlady: {
+      x: 30.2,
+      y: 58.89,
+      turnAtMs: 500,
+      arriveAtMs: 4000,
+      sprites: {
+        front: 'assets/BB301.png',
+        side: 'assets/BB301_side.png',
+        back: 'assets/BB301_back.png'
+      }
+    },
+    oldMan: {
+      x: 23.44,
+      y: 58.89,
+      startAtMs: 1000,
+      arriveAtMs: 8000,
+      boardAtMs: 16000,
+      boardedAtMs: 16600,
+      sprites: {
+        front: 'assets/BB905_c.png',
+        side: 'assets/BB905_side.png',
+        back: 'assets/BB905_c.png' // 暂无独立背面素材，先使用正面占位
+      }
+    },
+    route: {
+      corridorX: 79.5,
+      approachX: 79.5,
+      approachY: 70.86,
+      boardX: 80.1,
+      boardY: 74.6
+    },
+    elevator: {
+      area: [74.3, 84.7, 84.6, 100],
+      approachArea: [74.3, 78.89, 84.6, 84.7],
+      interactionBubble: {
+        left: 79.35,
+        top: 78.2,
+        transform: 'translate(-50%, -50%)'
+      },
+      display: { left: 79, top: 90 },
+      currentFloor: 9,
+      bottomFloor: 3,
+      topFloor: 12,
+      leavesNinthAtMs: 4000,
+      reachesBottomAtMs: 10000,
+      returnsToNinthAtMs: 16000,
+      leavesNinthForTopAtMs: 16600,
+      reachesTopAtMs: 19600
+    },
+    npcInteractionRadius: 9
+  },
+
   hqInteractions: [
     {
       id: 'sofa',

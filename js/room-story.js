@@ -36,23 +36,29 @@
     running: false,
     started: false,
     complete: false,
+    completedOnce: false,
     timers: [],
     typeTimer: null,
     dotTimer: null
   };
+  const analysisStoryProgress = {
+    seen: false,
+    active: false,
+    finished: false
+  };
   const analysisTranscriptTokens = [
-    { text: '毛仔', link: true },
+    { text: '毛仔', link: true, profile: 'maozi' },
     { text: '，' },
     { text: '你' },
     { text: '想想' },
     { text: '，那' },
-    { text: '老太', link: true },
+    { text: '老太', link: true, profile: 'laotai' },
     { text: '没出' },
     { text: '三日' },
     { text: '就' },
     { text: '咽气了' },
     { text: '，那' },
-    { text: '老头', link: true },
+    { text: '老头', link: true, profile: 'wangzihan' },
     { text: '花得完' },
     { text: '那' },
     { text: '一万多块钱' },
@@ -66,7 +72,7 @@
     { text: '，再' },
     { text: '把他' },
     { text: '杀了。' },
-    { text: '老大', link: true },
+    { text: '老大', link: true, profile: 'boss' },
     { text: '息了' },
     { text: '怒' },
     { text: '，就' },
@@ -78,6 +84,138 @@
     .map((token) => token.text)
     .join('');
   const analysisTranscriptChars = Array.from(analysisTranscriptText);
+  const voiceProfiles = {
+    haozi: {
+      id: 'haozi',
+      nameText: '说话者：刘豪（街头绰号：耗子，豪哥）',
+      primaryText: '说话者：刘豪',
+      source: '音频来源：BB11层',
+      photo: 'assets/BB1104_photo.jpg',
+      photoName: 'BB1104_photo',
+      gender: '性别：男',
+      age: '年龄：22',
+      address: '住所：BB1104',
+      job: '职业：自由职业',
+      summary: '2068年加入棍斧帮，代号“耗子”。2069年因寻衅滋事罪拘留2个月。2070年开始负责BB楼区域保护费收取及租金债务追讨的工作，被下属称为“豪哥”。（<span class="voice-book-link">彩色书</span>）',
+      startAtSearch: false
+    },
+    maozi: {
+      id: 'maozi',
+      nameText: '毛壮（街头绰号：毛仔）',
+      primaryText: '毛壮',
+      source: '',
+      photo: 'assets/BB1001_photo.jpg',
+      photoName: 'BB1001_photo',
+      gender: '性别：男',
+      age: '年龄：18',
+      address: '住所：BB1001',
+      job: '职业：自媒体',
+      summary: '2066年起，自媒体主要发布说唱视频，粉丝较少。（<span class="voice-book-link">颤音</span>）2070年加入棍斧帮，称同进行BB楼区域保护费收取及租金债务追讨工作的刘豪为“豪哥”。（<span class="voice-book-link">彩色书</span>）',
+      startAtSearch: true
+    },
+    laotai: {
+      id: 'laotai',
+      nameText: '李子欣（已故）',
+      primaryText: '李子欣',
+      source: '',
+      photo: 'assets/BB905_memorial.png',
+      photoName: '',
+      memorialPhoto: true,
+      gender: '性别：女',
+      age: '年龄：69（2071）',
+      address: '住所：BB905',
+      job: '职业：护士、家庭主妇',
+      summary: '2062年与丈夫王子涵迁入绮光城西部建设区。2068年迁入西平区公建BB楼。2071年3月确诊AML。4月11日病亡。（<span class="voice-book-link">好友圈</span>）',
+      startAtSearch: true
+    },
+    wangzihan: {
+      id: 'wangzihan',
+      nameText: '王子涵',
+      primaryText: '王子涵',
+      source: '',
+      photo: 'assets/BB905_photo.jpg',
+      photoName: 'BB905_photo',
+      gender: '性别：男',
+      age: '年龄：70',
+      address: '住所：BB905',
+      job: '职业：退休建筑师',
+      summary: '2062年与妻子李子欣迁入绮光城西部建设区，担任规划局结构设计师。（<span class="voice-book-link">好友圈</span>、<span class="voice-book-link">规划局官网</span>）2065年被辞退。（<span class="voice-book-link">规划局官网</span>）2068年迁入西平区公建BB楼。（<span class="voice-book-link">好友圈</span>）',
+      startAtSearch: true
+    },
+    boss: {
+      id: 'boss',
+      nameText: '棍斧帮老大',
+      primaryText: '棍斧帮老大',
+      source: '',
+      photo: '',
+      photoName: '',
+      emptyPhoto: true,
+      infoFallback: '超出监控范围',
+      gender: '',
+      age: '',
+      address: '',
+      job: '',
+      summary: '网络信息不足，无法交叉验证。（可参考：<span class="voice-book-link">彩色书</span>、<span class="voice-book-link">央网</span>）',
+      startAtSearch: true
+    }
+  };
+  let activeVoiceProfile = voiceProfiles.haozi;
+  let activeVoiceTraceChars = Array.from(activeVoiceProfile.nameText);
+  let activeVoicePrimaryLength = Array.from(activeVoiceProfile.primaryText).length;
+  const completedVoiceProfiles = new Set();
+  const voiceAnalysisProgress = {
+    running: false,
+    complete: false,
+    timers: [],
+    typeTimer: null,
+    dotTimer: null
+  };
+  const corridorRitualClock = {
+    started: false,
+    startedAt: 0,
+    pausedAt: null,
+    pausedMs: 0
+  };
+
+  function startCorridorRitual() {
+    if (corridorRitualClock.started || !analysisProgress.completedOnce) {
+      return false;
+    }
+    corridorRitualClock.started = true;
+    corridorRitualClock.startedAt = performance.now();
+    corridorRitualClock.pausedAt = null;
+    corridorRitualClock.pausedMs = 0;
+    window.dispatchEvent(new CustomEvent('game:corridor-ritual-start'));
+    return true;
+  }
+
+  function pauseCorridorRitual() {
+    if (!corridorRitualClock.started || corridorRitualClock.pausedAt !== null) {
+      return;
+    }
+    corridorRitualClock.pausedAt = performance.now();
+    window.dispatchEvent(new CustomEvent('game:corridor-ritual-pause'));
+  }
+
+  function resumeCorridorRitual() {
+    if (!corridorRitualClock.started || corridorRitualClock.pausedAt === null) {
+      return;
+    }
+    corridorRitualClock.pausedMs += performance.now() - corridorRitualClock.pausedAt;
+    corridorRitualClock.pausedAt = null;
+    window.dispatchEvent(new CustomEvent('game:corridor-ritual-resume'));
+  }
+
+  function corridorRitualSeconds() {
+    if (!corridorRitualClock.started) return 0;
+    const now = corridorRitualClock.pausedAt === null
+      ? performance.now()
+      : corridorRitualClock.pausedAt;
+    return Math.max(
+      0,
+      (now - corridorRitualClock.startedAt - corridorRitualClock.pausedMs) / 1000
+    );
+  }
 
   function pointInPolygon(p, poly) {
     let inside = false;
@@ -90,6 +228,21 @@
       }
     }
     return inside;
+  }
+
+  function oldManInvestigationData(visitedCorridor) {
+    const elder = (CFG.roomInteractions || []).find(
+      (interaction) => interaction.id === 'elder'
+    ) || {};
+    let info = '上了年纪的男性。腿脚不好。一般般友善。';
+    if (roomProgress.seenPortrait) {
+      info += '可能有个去世不久的老伴。';
+    }
+    return {
+      name: visitedCorridor ? '905老头' : '老头',
+      big: elder.big || 'assets/BB905_big.png',
+      info
+    };
   }
 
   let hqFlickerTimer = null;
@@ -335,6 +488,7 @@
       span.textContent = token.text;
       if (showLinks && token.link) {
         span.classList.add('analysis-link');
+        if (token.profile) span.dataset.profile = token.profile;
         span.style.setProperty('--link-delay', (linkIndex * 0.12) + 's');
         linkIndex += 1;
       }
@@ -347,6 +501,7 @@
     const analysisScene = document.getElementById('analysisScene');
     const empty = document.getElementById('analysisEmpty');
     const player = document.getElementById('analysisPlayer');
+    const voice = document.getElementById('voiceAnalysis');
     const systemStatus = document.getElementById('analysisSystemStatus');
     const signalState = document.getElementById('analysisSignalState');
     const transcript = document.getElementById('analysisTranscript');
@@ -356,6 +511,7 @@
     analysisScene.classList.remove('is-moved', 'is-frozen', 'is-finished');
     if (empty) empty.hidden = false;
     if (player) player.hidden = true;
+    if (voice) voice.hidden = true;
     if (systemStatus) systemStatus.textContent = 'STANDBY';
     if (signalState) signalState.textContent = 'IDLE';
     if (transcript) transcript.classList.remove('is-typing');
@@ -367,7 +523,7 @@
     }));
   }
 
-  function completeAnalysisPlayback() {
+  function completeAnalysisPlayback(showStory = true) {
     const scene = document.getElementById('analysisScene');
     const copy = document.getElementById('analysisCopy');
     const audioLabel = document.getElementById('analysisAudioLabel');
@@ -376,9 +532,13 @@
     const systemStatus = document.getElementById('analysisSystemStatus');
     const signalState = document.getElementById('analysisSignalState');
     const transcript = document.getElementById('analysisTranscript');
+    const wasComplete = analysisProgress.complete;
     clearAnalysisTimers();
     analysisProgress.running = false;
     analysisProgress.complete = true;
+    if (showStory || wasComplete) {
+      analysisProgress.completedOnce = true;
+    }
     if (scene) scene.classList.add('is-moved', 'is-frozen', 'is-finished');
     if (copy) copy.hidden = false;
     if (audioLabel) audioLabel.hidden = false;
@@ -396,6 +556,120 @@
     if (transcript) transcript.classList.remove('is-typing');
     setAnalysisPipeline(-1, true);
     renderAnalysisTranscript(analysisTranscriptChars.length, true);
+    if (showStory) maybeShowAnalysisResultDialogue();
+  }
+
+  function maybeShowAnalysisResultDialogue() {
+    if (analysisStoryProgress.seen || analysisStoryProgress.active) return;
+    if (!analysisProgress.complete) return;
+    const scene = document.getElementById('analysisScene');
+    const voice = document.getElementById('voiceAnalysis');
+    if (!scene || scene.hidden || (voice && !voice.hidden)) return;
+    showAnalysisResultDialogue();
+  }
+
+  function showAnalysisResultDialogue() {
+    const scene = document.getElementById('analysisScene');
+    const box = document.getElementById('analysisStoryDialogue');
+    const text = document.getElementById('analysisStoryText');
+    if (!scene || !box || !text || !box.hidden) return;
+    analysisStoryProgress.seen = true;
+    analysisStoryProgress.active = true;
+    scene.classList.add('is-dialogue');
+    box.hidden = false;
+    text.textContent = '';
+
+    const lines = [
+      [{ text: '（杀……杀人！这听起来可不太妙！）' }],
+      [
+        { text: '（我得去' },
+        { text: '提醒对门的那个老爷爷', warning: true },
+        { text: '！）' }
+      ]
+    ];
+    let lineIndex = 0;
+    let charCount = 0;
+    let timer = null;
+
+    const totalChars = (line) => line.reduce(
+      (sum, segment) => sum + Array.from(segment.text).length,
+      0
+    );
+
+    const renderLine = (line, count) => {
+      text.textContent = '';
+      let remaining = count;
+      line.forEach((segment) => {
+        if (remaining <= 0) return;
+        const chars = Array.from(segment.text);
+        const visible = chars.slice(0, remaining).join('');
+        if (!visible) return;
+        if (segment.warning) {
+          const span = document.createElement('span');
+          span.className = 'analysis-warning';
+          span.textContent = visible;
+          text.appendChild(span);
+        } else {
+          text.appendChild(document.createTextNode(visible));
+        }
+        remaining -= chars.length;
+      });
+    };
+
+    const finishTyping = () => {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+      renderLine(lines[lineIndex], totalChars(lines[lineIndex]));
+    };
+
+    const showLine = () => {
+      if (timer) clearInterval(timer);
+      charCount = 0;
+      renderLine(lines[lineIndex], 0);
+      timer = setInterval(() => {
+        charCount += 1;
+        renderLine(lines[lineIndex], charCount);
+        if (charCount >= totalChars(lines[lineIndex])) finishTyping();
+      }, 38);
+    };
+
+    const cleanup = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      box.hidden = true;
+      scene.classList.remove('is-dialogue');
+      analysisStoryProgress.active = false;
+      analysisStoryProgress.finished = true;
+      box.removeEventListener('click', advance);
+      window.removeEventListener('keydown', onKey);
+    };
+
+    const advance = (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (timer) {
+        finishTyping();
+        return;
+      }
+      if (lineIndex < lines.length - 1) {
+        lineIndex += 1;
+        showLine();
+      } else {
+        cleanup();
+      }
+    };
+
+    const onKey = (event) => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      advance(event);
+    };
+
+    box.addEventListener('click', advance);
+    window.addEventListener('keydown', onKey);
+    showLine();
   }
 
   function startAnalysisPlayback() {
@@ -472,16 +746,19 @@
     const analysisScene = document.getElementById('analysisScene');
     const empty = document.getElementById('analysisEmpty');
     const player = document.getElementById('analysisPlayer');
+    const voice = document.getElementById('voiceAnalysis');
     if (!desktopScene || !analysisScene || desktopScene.hidden) return;
     analysisProgress.started = true;
     const taskGuide = document.getElementById('desktopTaskGuide');
     if (taskGuide) taskGuide.hidden = true;
     if (empty) empty.hidden = true;
     if (player) player.hidden = false;
+    if (voice) voice.hidden = true;
     desktopScene.hidden = true;
     analysisScene.hidden = false;
     if (analysisProgress.complete) {
-      completeAnalysisPlayback();
+      completeAnalysisPlayback(false);
+      maybeShowAnalysisResultDialogue();
     } else {
       startAnalysisPlayback();
     }
@@ -490,11 +767,263 @@
     }));
   }
 
+  function clearVoiceAnalysisTimers() {
+    voiceAnalysisProgress.timers.forEach((timer) => clearTimeout(timer));
+    voiceAnalysisProgress.timers = [];
+    if (voiceAnalysisProgress.typeTimer) {
+      clearInterval(voiceAnalysisProgress.typeTimer);
+      voiceAnalysisProgress.typeTimer = null;
+    }
+    if (voiceAnalysisProgress.dotTimer) {
+      clearInterval(voiceAnalysisProgress.dotTimer);
+      voiceAnalysisProgress.dotTimer = null;
+    }
+  }
+
+  function renderVoiceSpeaker(count) {
+    const primary = document.getElementById('voiceSpeakerPrimary');
+    const detail = document.getElementById('voiceSpeakerDetail');
+    if (!primary || !detail) return;
+    const visibleChars = Array.from(
+      activeVoiceTraceChars.slice(0, count).join('')
+    );
+    primary.textContent = visibleChars
+      .slice(0, activeVoicePrimaryLength)
+      .join('');
+    detail.textContent = visibleChars
+      .slice(activeVoicePrimaryLength)
+      .join('');
+  }
+
+  function configureVoiceProfile(profileId) {
+    const profile = voiceProfiles[profileId];
+    if (!profile) return false;
+    activeVoiceProfile = profile;
+    activeVoiceTraceChars = Array.from(profile.nameText);
+    activeVoicePrimaryLength = Array.from(profile.primaryText).length;
+    const voice = document.getElementById('voiceAnalysis');
+    const player = document.getElementById('analysisPlayer');
+    const empty = document.getElementById('analysisEmpty');
+    const source = document.getElementById('voiceSource');
+    const photo = document.getElementById('voicePhotoImage');
+    const photoCard = document.getElementById('voicePhotoCard');
+    const photoEmpty = document.getElementById('voicePhotoEmpty');
+    const photoName = document.getElementById('voicePhotoName');
+    const infoGrid = document.querySelector('.voice-info-grid');
+    const infoFallback = document.getElementById('voiceInfoFallback');
+    const infoValues = {
+      voiceInfoGender: profile.gender,
+      voiceInfoAge: profile.age,
+      voiceInfoAddress: profile.address,
+      voiceInfoJob: profile.job
+    };
+    if (voice) {
+      voice.hidden = false;
+      voice.classList.remove('is-speaker-final');
+    }
+    if (player) player.hidden = true;
+    if (empty) empty.hidden = true;
+    if (source) {
+      source.textContent = profile.source;
+      source.hidden = true;
+    }
+    if (photo) {
+      photo.src = profile.photo || '';
+      photo.hidden = !profile.photo;
+    }
+    if (photoCard) {
+      photoCard.classList.toggle('is-memorial', profile.memorialPhoto === true);
+      photoCard.classList.toggle('is-empty', profile.emptyPhoto === true);
+    }
+    if (photoEmpty) photoEmpty.hidden = !profile.emptyPhoto;
+    if (photoName) {
+      photoName.textContent = profile.photoName;
+      photoName.hidden = !profile.photoName;
+    }
+    Object.entries(infoValues).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    });
+    if (infoGrid) infoGrid.hidden = Boolean(profile.infoFallback);
+    if (infoFallback) {
+      infoFallback.textContent = profile.infoFallback || '';
+      infoFallback.hidden = !profile.infoFallback;
+    }
+    const summary = document.getElementById('voiceSummaryText');
+    if (summary) summary.innerHTML = profile.summary;
+    return true;
+  }
+
+  function finishVoiceNamePresentation() {
+    const voice = document.getElementById('voiceAnalysis');
+    const status = document.getElementById('voiceStatus');
+    clearVoiceAnalysisTimers();
+    voiceAnalysisProgress.running = false;
+    voiceAnalysisProgress.complete = true;
+    completedVoiceProfiles.add(activeVoiceProfile.id);
+    if (voice) voice.classList.add('is-speaker-final');
+    if (status) status.hidden = true;
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
+    if (systemStatus) systemStatus.textContent = 'VOICE MATCH';
+    if (signalState) signalState.textContent = 'PROFILE';
+  }
+
+  function completeVoiceAnalysis(instant = false) {
+    const voice = document.getElementById('voiceAnalysis');
+    const statusBox = document.getElementById('voiceStatus');
+    const statusLabel = document.getElementById('voiceStatusLabel');
+    const dots = document.getElementById('voiceStatusDots');
+    const source = document.getElementById('voiceSource');
+    const photo = document.getElementById('voicePhotoCard');
+    const info = document.getElementById('voiceInfoCard');
+    const summary = document.getElementById('voiceSummaryCard');
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
+    clearVoiceAnalysisTimers();
+    if (voice) voice.classList.remove('is-speaker-final');
+    voiceAnalysisProgress.running = !instant;
+    voiceAnalysisProgress.complete = instant;
+    if (statusBox) statusBox.hidden = false;
+    if (dots) {
+      dots.textContent = '';
+      dots.hidden = true;
+    }
+    if (source) source.hidden = !activeVoiceProfile.source;
+    if (photo) photo.hidden = false;
+    if (info) info.hidden = false;
+    if (summary) summary.hidden = false;
+    if (systemStatus) systemStatus.textContent = 'VOICE MATCH';
+    if (signalState) signalState.textContent = 'PROFILE';
+    renderVoiceSpeaker(activeVoiceTraceChars.length);
+    if (statusLabel) statusLabel.textContent = '搜索完成';
+    if (instant) {
+      finishVoiceNamePresentation();
+    } else {
+      voiceAnalysisProgress.timers.push(setTimeout(
+        finishVoiceNamePresentation,
+        1000
+      ));
+    }
+  }
+
+  function startVoiceAnalysis() {
+    const voice = document.getElementById('voiceAnalysis');
+    const player = document.getElementById('analysisPlayer');
+    const empty = document.getElementById('analysisEmpty');
+    const statusBox = document.getElementById('voiceStatus');
+    const status = document.getElementById('voiceStatusLabel');
+    const dots = document.getElementById('voiceStatusDots');
+    const speakerPrimary = document.getElementById('voiceSpeakerPrimary');
+    const speakerDetail = document.getElementById('voiceSpeakerDetail');
+    const source = document.getElementById('voiceSource');
+    const photo = document.getElementById('voicePhotoCard');
+    const info = document.getElementById('voiceInfoCard');
+    const summary = document.getElementById('voiceSummaryCard');
+    const systemStatus = document.getElementById('analysisSystemStatus');
+    const signalState = document.getElementById('analysisSignalState');
+    if (!voice) return;
+    clearVoiceAnalysisTimers();
+    voiceAnalysisProgress.running = true;
+    voiceAnalysisProgress.complete = false;
+    if (player) player.hidden = true;
+    if (empty) empty.hidden = true;
+    voice.hidden = false;
+    voice.classList.remove('is-speaker-final');
+    if (statusBox) statusBox.hidden = false;
+    if (status) {
+      status.textContent = activeVoiceProfile.startAtSearch
+        ? '搜索中'
+        : '声纹分析中';
+    }
+    if (speakerPrimary) speakerPrimary.textContent = '';
+    if (speakerDetail) speakerDetail.textContent = '';
+    if (source) source.hidden = true;
+    if (photo) photo.hidden = true;
+    if (info) info.hidden = true;
+    if (summary) summary.hidden = true;
+    if (systemStatus) systemStatus.textContent = 'VOICE TRACE';
+    if (signalState) signalState.textContent = 'SEARCH';
+
+    let dotCount = 1;
+    if (dots) dots.textContent = '.';
+    voiceAnalysisProgress.dotTimer = setInterval(() => {
+      dotCount = dotCount % 3 + 1;
+      if (dots) dots.textContent = '.'.repeat(dotCount);
+    }, 260);
+
+    const beginProfileDetails = () => {
+      if (status) status.textContent = '搜索中';
+      if (dots) dots.hidden = false;
+      if (source) source.hidden = !activeVoiceProfile.source;
+      let charCount = 1;
+      renderVoiceSpeaker(charCount);
+      const typeDelay = Math.max(
+        45,
+        Math.floor(2000 / Math.max(1, activeVoiceTraceChars.length - 1))
+      );
+      voiceAnalysisProgress.typeTimer = setInterval(() => {
+        if (charCount >= activeVoiceTraceChars.length) return;
+        charCount += 1;
+        renderVoiceSpeaker(charCount);
+      }, typeDelay);
+
+      voiceAnalysisProgress.timers.push(setTimeout(() => {
+        if (photo) photo.hidden = false;
+      }, 1000));
+      voiceAnalysisProgress.timers.push(setTimeout(() => {
+        if (info) info.hidden = false;
+        renderVoiceSpeaker(activeVoiceTraceChars.length);
+      }, 2000));
+      voiceAnalysisProgress.timers.push(setTimeout(
+        completeVoiceAnalysis,
+        4000
+      ));
+    };
+
+    if (activeVoiceProfile.startAtSearch) {
+      beginProfileDetails();
+    } else {
+      voiceAnalysisProgress.timers.push(setTimeout(beginProfileDetails, 2000));
+    }
+  }
+
+  function showVoiceAnalysis(profileId = 'haozi') {
+    const analysisScene = document.getElementById('analysisScene');
+    const voice = document.getElementById('voiceAnalysis');
+    if (!analysisScene || !voice || analysisScene.hidden) return;
+    if (!configureVoiceProfile(profileId)) return;
+    if (completedVoiceProfiles.has(profileId)) {
+      completeVoiceAnalysis(true);
+    } else {
+      startVoiceAnalysis();
+    }
+    window.dispatchEvent(new CustomEvent('game:voice-analysis-open', {
+      detail: { profile: profileId }
+    }));
+  }
+
   function hideAnalysis() {
     const desktopScene = document.getElementById('desktopScene');
     const analysisScene = document.getElementById('analysisScene');
+    const voice = document.getElementById('voiceAnalysis');
+    const player = document.getElementById('analysisPlayer');
     if (!desktopScene || !analysisScene || analysisScene.hidden) return;
-    if (analysisProgress.running) completeAnalysisPlayback();
+    if (voice && !voice.hidden) {
+      if (voiceAnalysisProgress.running) completeVoiceAnalysis(true);
+      voice.hidden = true;
+      if (player) player.hidden = false;
+      const systemStatus = document.getElementById('analysisSystemStatus');
+      const signalState = document.getElementById('analysisSignalState');
+      if (systemStatus) systemStatus.textContent = 'COMPLETE';
+      if (signalState) signalState.textContent = 'LOCKED';
+      window.dispatchEvent(new CustomEvent('game:voice-analysis-close', {
+        detail: { to: 'analysis' }
+      }));
+      return;
+    }
+    if (analysisProgress.running) completeAnalysisPlayback(false);
+    if (voiceAnalysisProgress.running) completeVoiceAnalysis(true);
     analysisScene.hidden = true;
     desktopScene.hidden = false;
     window.dispatchEvent(new CustomEvent('game:analysis-close', {
@@ -595,6 +1124,7 @@
   function leaveHqBase() {
     const hqScene = document.getElementById('hqScene');
     if (!hqScene || hqScene.hidden) return;
+    startCorridorRitual();
     hqScene.hidden = true;
     const roomScene = document.getElementById('roomScene');
     if (roomScene) roomScene.hidden = true;
@@ -893,8 +1423,22 @@
       });
     });
     const analysisBackButton = document.getElementById('analysisBackButton');
+    const analysisAudioLabel = document.getElementById('analysisAudioLabel');
     if (analysisBackButton) {
       analysisBackButton.addEventListener('click', hideAnalysis);
+    }
+    if (analysisAudioLabel) {
+      analysisAudioLabel.addEventListener('click', () => {
+        showVoiceAnalysis('haozi');
+      });
+    }
+    const analysisTranscript = document.getElementById('analysisTranscript');
+    if (analysisTranscript) {
+      analysisTranscript.addEventListener('click', (event) => {
+        const link = event.target.closest('.analysis-link[data-profile]');
+        if (!link) return;
+        showVoiceAnalysis(link.dataset.profile);
+      });
     }
     const acceptedTask = document.getElementById('desktopAcceptedTask');
     const analyzeButton = document.getElementById('desktopAnalyzeButton');
@@ -1001,6 +1545,18 @@
       if (debugMode === '3') {
         cover.hidden = true;
         enterHq2Base();
+        return;
+      }
+      if (debugMode === '4') {
+        cover.hidden = true;
+        if (roomScene) roomScene.hidden = true;
+        analysisProgress.started = true;
+        analysisProgress.complete = true;
+        analysisProgress.completedOnce = true;
+        analysisStoryProgress.seen = true;
+        analysisStoryProgress.active = false;
+        analysisStoryProgress.finished = true;
+        enterHqBase();
         return;
       }
       if (demoStartInComms) {
@@ -1175,19 +1731,10 @@
 
     const showInvestigation = (target) => {
       if (!investigationOverlay || !target) return;
-      if (investigationName) {
-        investigationName.textContent = roomProgress.visitedCorridor
-          ? '905老头'
-          : '老头';
-      }
-      if (investigationBig && target.big) investigationBig.src = target.big;
-      if (investigationInfo) {
-        let info = '上了年纪的男性。腿脚不好。一般般友善。';
-        if (roomProgress.seenPortrait) {
-          info += '可能有个去世不久的老伴。';
-        }
-        investigationInfo.textContent = info;
-      }
+      const data = oldManInvestigationData(roomProgress.visitedCorridor);
+      if (investigationName) investigationName.textContent = data.name;
+      if (investigationBig) investigationBig.src = data.big;
+      if (investigationInfo) investigationInfo.textContent = data.info;
       investigationOverlay.hidden = false;
     };
 
@@ -1636,6 +2183,15 @@
 
     const canStandAt = (nextX, nextY) => {
       const foot = { x: nextX, y: nextY + halfHeight };
+      const insideElevator = foot.x >= elevatorArea[0] &&
+        foot.x <= elevatorArea[2] &&
+        foot.y >= elevatorArea[1] &&
+        foot.y <= elevatorArea[3];
+      if (corridorRitualClock.started &&
+          insideElevator &&
+          !ritualState.elevator.accessible) {
+        return false;
+      }
       return !areas.length || areas.some((area) => pointInPolygon(foot, area));
     };
 
@@ -1644,19 +2200,315 @@
     const corridorDialogue = document.getElementById('corridorDialogue');
     const corridorDialogueName = document.getElementById('corridorDialogueName');
     const corridorDialogueText = document.getElementById('corridorDialogueText');
+    const doorChoice = document.getElementById('corridorDoorChoice');
+    const doorChoiceButtons = doorChoice
+      ? Array.from(doorChoice.querySelectorAll('button'))
+      : [];
+    const npcChoice = document.getElementById('corridorNpcChoice');
+    const npcChoiceButtons = npcChoice
+      ? Array.from(npcChoice.querySelectorAll('button'))
+      : [];
+    const oldManElement = document.getElementById('corridorOldMan');
+    const landladyElement = document.getElementById('corridorLandlady');
+    const elevatorDisplay = document.getElementById('corridorElevatorDisplay');
+    const elevatorFloor = document.getElementById('corridorElevatorFloor');
+    const investigationOverlay = document.getElementById('investigationOverlay');
+    const investigationName = document.getElementById('investigationName');
+    const investigationBig = document.getElementById('investigationBig');
+    const investigationInfo = document.getElementById('investigationInfo');
+    const investigationExit = document.getElementById('investigationExit');
+    const ritualConfig = CFG.corridorRitual || {};
+    const ritualRoute = ritualConfig.route || {};
+    const oldManConfig = ritualConfig.oldMan || {};
+    const landladyConfig = ritualConfig.landlady || {};
+    const elevatorConfig = ritualConfig.elevator || {};
+    const elevatorArea = elevatorConfig.area || [74.3, 84.7, 84.6, 100];
+    const elevatorApproachArea =
+      elevatorConfig.approachArea || [74.3, 78.89, 84.6, 84.7];
+    if (elevatorDisplay) {
+      const display = elevatorConfig.display || {};
+      elevatorDisplay.style.left = (display.left || 79.35) + '%';
+      elevatorDisplay.style.top = (display.top || 84.2) + '%';
+    }
     let activeDoor = null;
+    let activeNpc = null;
+    let activeElevator = false;
+    let npcChoiceTarget = null;
     let doorLocked = false;
-    const updateCorridorDoorHighlight = () => {
-      if (doorLocked) {
-        doorInteractions.forEach((door) => {
-          const element = document.getElementById(door.id);
-          if (element) {
-            element.classList.remove('door-interactable');
-            element.classList.remove('is-touched');
+    let corridorInvestigationOpen = false;
+    let lastElevatorFloor = '';
+    const ritualState = {
+      oldMan: {
+        x: oldManConfig.x || 23.44,
+        y: oldManConfig.y || 58.89,
+        visible: false
+      },
+      landlady: {
+        x: landladyConfig.x || 30.2,
+        y: landladyConfig.y || 58.89,
+        visible: false
+      },
+      elevator: {
+        accessible: false,
+        boardingLocked: false,
+        floor: 9,
+        atCurrentFloor: false
+      }
+    };
+
+    const ritualPath = (startX, startY) => [
+      { x: startX, y: startY },
+      { x: ritualRoute.corridorX || 58, y: startY },
+      { x: ritualRoute.corridorX || 58, y: ritualRoute.approachY || 70.86 },
+      { x: ritualRoute.approachX || 72.7, y: ritualRoute.approachY || 70.86 }
+    ];
+    const pointOnPath = (points, progress) => {
+      const lengths = [];
+      let total = 0;
+      for (let index = 1; index < points.length; index += 1) {
+        const length = Math.hypot(
+          points[index].x - points[index - 1].x,
+          points[index].y - points[index - 1].y
+        );
+        lengths.push(length);
+        total += length;
+      }
+      let remaining = Math.max(0, Math.min(1, progress)) * total;
+      for (let index = 0; index < lengths.length; index += 1) {
+        if (remaining <= lengths[index]) {
+          const ratio = lengths[index] ? remaining / lengths[index] : 0;
+          return {
+            x: points[index].x +
+              (points[index + 1].x - points[index].x) * ratio,
+            y: points[index].y +
+              (points[index + 1].y - points[index].y) * ratio
+          };
+        }
+        remaining -= lengths[index];
+      }
+      return points[points.length - 1];
+    };
+    const pathDirectionAt = (points, progress) => {
+      const before = pointOnPath(points, Math.max(0, progress - .002));
+      const after = pointOnPath(points, Math.min(1, progress + .002));
+      const dx = after.x - before.x;
+      const dy = after.y - before.y;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx < 0 ? 'left' : 'right';
+      }
+      return dy < 0 ? 'up' : 'down';
+    };
+    const setNpcPosition = (element, target, direction, sprites) => {
+      if (!element || !target) return;
+      const art = sprites || {};
+      const sprite = direction === 'up'
+        ? (art.back || art.front)
+        : direction === 'down'
+          ? (art.front || art.side)
+          : art.side;
+      if (sprite && element.getAttribute('src') !== sprite) {
+        element.src = sprite;
+      }
+      element.style.left = target.x + '%';
+      element.style.top = target.y + '%';
+      element.dataset.direction = direction;
+      element.classList.toggle('is-facing-right', direction === 'right');
+      element.hidden = !target.visible;
+    };
+    const syncCorridorRitual = () => {
+      const cfg = ritualConfig;
+      const elapsedMs = corridorRitualSeconds() * 1000;
+      const started = corridorRitualClock.started;
+      const ladyStart = landladyConfig.x || 30.2;
+      const ladyY = landladyConfig.y || 58.89;
+      const oldStart = oldManConfig.x || 23.44;
+      const oldY = oldManConfig.y || 58.89;
+      const ladyTurnAt = landladyConfig.turnAtMs || 500;
+      const ladyArriveAt = landladyConfig.arriveAtMs || 4000;
+      const oldStartAt = oldManConfig.startAtMs || 1000;
+      const oldArriveAt = oldManConfig.arriveAtMs || 8000;
+      const oldBoardAt = oldManConfig.boardAtMs || 16000;
+      const oldBoardedAt = oldManConfig.boardedAtMs || 16600;
+      const ladyPath = ritualPath(ladyStart, ladyY);
+      const oldPath = ritualPath(oldStart, oldY);
+      const approach = oldPath[oldPath.length - 1];
+      const ladySprites = landladyConfig.sprites || {};
+      const oldManSprites = oldManConfig.sprites || {};
+
+      ritualState.landlady.visible = started && elapsedMs < ladyArriveAt;
+      let ladyDirection = 'left';
+      if (ritualState.landlady.visible) {
+        const ladyProgress = (elapsedMs - ladyTurnAt) /
+          Math.max(1, ladyArriveAt - ladyTurnAt);
+        const point = elapsedMs < ladyTurnAt
+          ? { x: ladyStart, y: ladyY }
+          : pointOnPath(ladyPath, ladyProgress);
+        if (elapsedMs >= ladyTurnAt) {
+          ladyDirection = pathDirectionAt(ladyPath, ladyProgress);
+        }
+        ritualState.landlady.x = point.x;
+        ritualState.landlady.y = point.y;
+      }
+      setNpcPosition(landladyElement, ritualState.landlady, ladyDirection,
+        ladySprites);
+
+      ritualState.oldMan.visible = started && elapsedMs < oldBoardedAt;
+      let oldManDirection = 'right';
+      if (ritualState.oldMan.visible) {
+        let point = { x: oldStart, y: oldY };
+        if (elapsedMs >= oldBoardAt) {
+          point = pointOnPath(
+            [
+              approach,
+              {
+                x: ritualRoute.boardX || 80.1,
+                y: ritualRoute.boardY || 74.6
+              }
+            ],
+            (elapsedMs - oldBoardAt) / Math.max(1, oldBoardedAt - oldBoardAt)
+          );
+          oldManDirection = 'down';
+        } else if (elapsedMs >= oldStartAt) {
+          const oldProgress = (elapsedMs - oldStartAt) /
+            Math.max(1, oldArriveAt - oldStartAt);
+          point = pointOnPath(oldPath, oldProgress);
+          oldManDirection = oldProgress >= 1
+            ? 'down'
+            : pathDirectionAt(oldPath, oldProgress);
+        }
+        ritualState.oldMan.x = point.x;
+        ritualState.oldMan.y = point.y;
+      }
+      setNpcPosition(oldManElement, ritualState.oldMan, oldManDirection,
+        oldManSprites);
+
+      const floorMs = elevatorConfig.floorTravelMs || cfg.floorTravelMs || 1000;
+      const currentFloor = elevatorConfig.currentFloor || 9;
+      const bottomFloor = elevatorConfig.bottomFloor || 3;
+      const topFloor = elevatorConfig.topFloor || 12;
+      const leavesNinthAt = elevatorConfig.leavesNinthAtMs || 4000;
+      const reachesBottomAt = elevatorConfig.reachesBottomAtMs || 10000;
+      const returnsToNinthAt = elevatorConfig.returnsToNinthAtMs || 16000;
+      const leavesNinthForTopAt =
+        elevatorConfig.leavesNinthForTopAtMs || 16600;
+      const reachesTopAt = elevatorConfig.reachesTopAtMs || 19600;
+      let floor = currentFloor;
+      let atCurrentFloor = false;
+      if (elapsedMs < leavesNinthAt) {
+        floor = currentFloor;
+        atCurrentFloor = true;
+      } else if (elapsedMs < reachesBottomAt) {
+        floor = currentFloor - Math.min(
+          currentFloor - bottomFloor,
+          (elapsedMs - leavesNinthAt) / floorMs
+        );
+      } else if (elapsedMs < returnsToNinthAt) {
+        floor = bottomFloor + Math.min(
+          currentFloor - bottomFloor,
+          (elapsedMs - reachesBottomAt) / floorMs
+        );
+      } else if (elapsedMs < leavesNinthForTopAt) {
+        floor = currentFloor;
+        atCurrentFloor = true;
+      } else if (elapsedMs < reachesTopAt) {
+        floor = currentFloor + Math.min(
+          topFloor - currentFloor,
+          (elapsedMs - leavesNinthForTopAt) / floorMs
+        );
+      } else {
+        floor = topFloor;
+      }
+      const boardingLocked = elapsedMs >= returnsToNinthAt &&
+        elapsedMs < oldBoardedAt;
+      ritualState.elevator.accessible = started &&
+        atCurrentFloor &&
+        !boardingLocked;
+      ritualState.elevator.boardingLocked = started && boardingLocked;
+      ritualState.elevator.floor = Math.round(floor);
+      ritualState.elevator.atCurrentFloor = atCurrentFloor;
+
+      if (elevatorDisplay && elevatorFloor) {
+        const showFloor = started && !atCurrentFloor;
+        elevatorDisplay.hidden = !showFloor;
+        if (showFloor) {
+          const displayFloor = String(Math.round(floor));
+          if (displayFloor !== lastElevatorFloor) {
+            elevatorFloor.textContent = displayFloor;
+            lastElevatorFloor = displayFloor;
           }
-        });
+        }
+      }
+    };
+
+    const npcSnapshot = (key) => {
+      const state = ritualState[key];
+      if (!state || !state.visible) return null;
+      return {
+        key,
+        name: key === 'oldMan' ? '905老头' : '301包租婆',
+        x: state.x,
+        y: state.y,
+        footY: state.y + halfHeight
+      };
+    };
+    const nearestNpc = (footX, footY) => {
+      const radius = ritualConfig.npcInteractionRadius || 9;
+      let nearest = null;
+      let distance = Infinity;
+      ['oldMan', 'landlady'].forEach((key) => {
+        const npc = npcSnapshot(key);
+        if (!npc) return;
+        const currentDistance = Math.hypot(footX - npc.x, footY - npc.footY);
+        if (currentDistance <= radius && currentDistance < distance) {
+          nearest = npc;
+          distance = currentDistance;
+        }
+      });
+      return { npc: nearest, distance };
+    };
+    const pointInRect = (xValue, yValue, rect) => (
+      xValue >= rect[0] &&
+      xValue <= rect[2] &&
+      yValue >= rect[1] &&
+      yValue <= rect[3]
+    );
+    const footInElevator = (footX, footY) => (
+      pointInRect(footX, footY, elevatorArea)
+    );
+    const footInElevatorApproach = (footX, footY) => (
+      pointInRect(footX, footY, elevatorApproachArea)
+    );
+    let lastElevatorBounceAt = 0;
+    const bounceFromElevator = () => {
+      const now = performance.now();
+      if (now - lastElevatorBounceAt < 260) return;
+      lastElevatorBounceAt = now;
+      x = Math.min(x, elevatorArea[0] - 1.2);
+      person.style.left = x + '%';
+      keys.clear();
+      person.classList.remove('is-elevator-bounced');
+      void person.offsetWidth;
+      person.classList.add('is-elevator-bounced');
+      setTimeout(() => {
+        person.classList.remove('is-elevator-bounced');
+      }, 340);
+    };
+    const clearDoorHighlight = (doorId) => {
+      if (!doorId) return;
+      const element = document.getElementById(doorId);
+      if (element) {
+        element.classList.remove('door-interactable');
+        element.classList.remove('is-touched');
+      }
+    };
+    const updateCorridorDoorHighlight = () => {
+      syncCorridorRitual();
+      if (doorLocked) {
+        doorInteractions.forEach((door) => clearDoorHighlight(door.id));
         if (doorBubble) doorBubble.hidden = true;
         activeDoor = null;
+        activeNpc = null;
+        activeElevator = false;
         return;
       }
       const footX = x;
@@ -1664,6 +2516,9 @@
       let closest = null;
       let closestDistance = Infinity;
       doorInteractions.forEach((door) => {
+        if (corridorRitualClock.started && door.id === 'corridor-box-3') {
+          return;
+        }
         const rect = door.rect;
         const nearX = Math.max(rect[0], Math.min(footX, rect[2]));
         const nearY = Math.max(rect[1], Math.min(footY, rect[3]));
@@ -1673,16 +2528,45 @@
           closestDistance = distance;
         }
       });
+      const nearbyNpc = nearestNpc(footX, footY);
+      const npcIsCloser = nearbyNpc.npc &&
+        (!closest || nearbyNpc.distance < closestDistance);
+      if (npcIsCloser) {
+        clearDoorHighlight(activeDoor ? activeDoor.id : null);
+        activeDoor = null;
+        activeNpc = nearbyNpc.npc;
+        activeElevator = false;
+        if (doorBubble) {
+          doorBubble.hidden = false;
+          doorBubble.style.left = activeNpc.x + '%';
+          doorBubble.style.top = (activeNpc.y - 10.5) + '%';
+          doorBubble.style.transform = 'translate(-50%, -50%)';
+          doorBubble.alt = '按 E 与' + activeNpc.name + '互动';
+        }
+        return;
+      }
+      activeNpc = null;
+      if (footInElevatorApproach(footX, footY) &&
+          !ritualState.elevator.boardingLocked) {
+        clearDoorHighlight(activeDoor ? activeDoor.id : null);
+        activeDoor = null;
+        activeElevator = true;
+        if (doorBubble) {
+          const bubble = elevatorConfig.interactionBubble || {};
+          doorBubble.hidden = false;
+          doorBubble.style.left = (bubble.left || 79.35) + '%';
+          doorBubble.style.top = (bubble.top || 78.2) + '%';
+          doorBubble.style.transform =
+            bubble.transform || 'translate(-50%, -50%)';
+          doorBubble.alt = '按 E 操作电梯';
+        }
+        return;
+      }
+      activeElevator = false;
       const previousId = activeDoor ? activeDoor.id : null;
       const nextId = closest ? closest.id : null;
       if (previousId !== nextId) {
-        if (previousId) {
-          const previous = document.getElementById(previousId);
-          if (previous) {
-            previous.classList.remove('door-interactable');
-            previous.classList.remove('is-touched');
-          }
-        }
+        clearDoorHighlight(previousId);
         if (nextId) {
           const current = document.getElementById(nextId);
           if (current) {
@@ -1701,6 +2585,7 @@
       doorBubble.style.left = activeDoor.bubble.left + '%';
       doorBubble.style.top = activeDoor.bubble.top + '%';
       doorBubble.style.transform = activeDoor.bubble.transform || 'none';
+      doorBubble.alt = '按 E 互动';
     };
 
     const showCorridorDoorMessage = (messageLines, done) => {
@@ -1719,38 +2604,71 @@
       let index = 0;
       let timer = null;
       let completeText = '';
+      let completeSegments = [];
       let complete = false;
+      const normalizeLine = (line) => {
+        if (line && Array.isArray(line.segments)) {
+          return {
+            name: '',
+            segments: line.segments
+          };
+        }
+        const raw = String(line || '');
+        const match = raw.match(/^([^：:]+)[：:]([\s\S]*)$/);
+        return {
+          name: match ? match[1].trim() : '',
+          segments: [{ text: match ? match[2] : raw }]
+        };
+      };
+      const renderText = (count) => {
+        corridorDialogueText.textContent = '';
+        let remaining = count;
+        completeSegments.forEach((segment) => {
+          if (remaining <= 0) return;
+          const chars = Array.from(segment.text);
+          const visible = chars.slice(0, remaining).join('');
+          if (!visible) return;
+          if (segment.warning) {
+            const span = document.createElement('span');
+            span.className = 'corridor-warning';
+            span.textContent = visible;
+            corridorDialogueText.appendChild(span);
+          } else {
+            corridorDialogueText.appendChild(document.createTextNode(visible));
+          }
+          remaining -= chars.length;
+        });
+      };
       const finishTyping = () => {
         if (!timer) return;
         clearInterval(timer);
         timer = null;
-        corridorDialogueText.textContent = completeText;
+        renderText(Array.from(completeText).length);
         complete = true;
       };
       const showLine = () => {
         if (timer) clearInterval(timer);
         timer = null;
         complete = false;
-        const raw = String(lines[index] || '');
-        const match = raw.match(/^([^：:]+)[：:]([\s\S]*)$/);
-        if (match && corridorDialogueName) {
-          corridorDialogueName.textContent = match[1].trim();
+        const normalized = normalizeLine(lines[index]);
+        completeSegments = normalized.segments;
+        completeText = completeSegments.map((segment) => segment.text).join('');
+        if (normalized.name && corridorDialogueName) {
+          corridorDialogueName.textContent = normalized.name;
           corridorDialogueName.hidden = false;
-          completeText = match[2];
         } else {
           if (corridorDialogueName) {
             corridorDialogueName.textContent = '';
             corridorDialogueName.hidden = true;
           }
-          completeText = raw;
         }
         corridorDialogueText.textContent = '';
         let charIndex = 0;
         const delay = (CFG.dialogue && CFG.dialogue.charDelay) || 38;
         timer = setInterval(() => {
           charIndex += 1;
-          corridorDialogueText.textContent = completeText.slice(0, charIndex);
-          if (charIndex >= completeText.length) finishTyping();
+          renderText(charIndex);
+          if (charIndex >= Array.from(completeText).length) finishTyping();
         }, delay);
       };
       const advance = (event) => {
@@ -1779,6 +2697,146 @@
       corridorDialogue.addEventListener('click', advance);
       window.addEventListener('keydown', onKey);
       showLine();
+    };
+
+    const hideNpcChoice = (resumeClock = true) => {
+      if (npcChoice) npcChoice.hidden = true;
+      npcChoiceTarget = null;
+      if (!resumeClock) return;
+      doorLocked = false;
+      keys.clear();
+      resumeCorridorRitual();
+      updateCorridorDoorHighlight();
+    };
+
+    const showNpcChoice = (npc) => {
+      if (!npcChoice || !npc || doorLocked) return;
+      doorLocked = true;
+      npcChoiceTarget = npc;
+      keys.clear();
+      pauseCorridorRitual();
+      if (doorBubble) doorBubble.hidden = true;
+      npcChoice.style.left = npc.x + '%';
+      npcChoice.style.top = (npc.y - 12) + '%';
+      npcChoice.style.transform = 'translate(-50%, -100%)';
+      npcChoice.hidden = false;
+    };
+
+    const closeCorridorInvestigation = () => {
+      if (!corridorInvestigationOpen) return;
+      corridorInvestigationOpen = false;
+      if (investigationOverlay) investigationOverlay.hidden = true;
+      doorLocked = false;
+      keys.clear();
+      resumeCorridorRitual();
+      updateCorridorDoorHighlight();
+    };
+
+    const showOldManInvestigation = () => {
+      if (!investigationOverlay) return;
+      roomProgress.visitedCorridor = true;
+      const data = oldManInvestigationData(true);
+      if (investigationName) investigationName.textContent = data.name;
+      if (investigationBig) investigationBig.src = data.big;
+      if (investigationInfo) investigationInfo.textContent = data.info;
+      doorLocked = true;
+      keys.clear();
+      pauseCorridorRitual();
+      if (doorBubble) doorBubble.hidden = true;
+      investigationOverlay.hidden = false;
+      corridorInvestigationOpen = true;
+    };
+
+    if (investigationExit) {
+      investigationExit.addEventListener('click', (event) => {
+        if (!corridorInvestigationOpen) return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeCorridorInvestigation();
+      });
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (!corridorInvestigationOpen || event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeCorridorInvestigation();
+    }, true);
+
+    const triggerElevatorInteraction = () => {
+      if (!activeElevator || ritualState.elevator.boardingLocked) return;
+      window.dispatchEvent(new CustomEvent('game:corridor-elevator', {
+        detail: {
+          floor: ritualState.elevator.floor,
+          atCurrentFloor: ritualState.elevator.atCurrentFloor,
+          accessible: ritualState.elevator.accessible
+        }
+      }));
+    };
+
+    const chooseNpcAction = (action) => {
+      const npc = npcChoiceTarget;
+      if (!npc) return;
+      if (action === 'exit') {
+        hideNpcChoice(true);
+        return;
+      }
+      hideNpcChoice(false);
+      window.dispatchEvent(new CustomEvent('game:corridor-npc-action', {
+        detail: { npc: npc.key, name: npc.name, action }
+      }));
+      if (npc.key === 'oldMan' && action === 'investigate') {
+        showOldManInvestigation();
+        return;
+      }
+      const message = action === 'investigate'
+        ? npc.name + '：（调查内容待接入）'
+        : npc.name + '：（对话内容待接入）';
+      showCorridorDoorMessage([message], () => {
+        resumeCorridorRitual();
+        updateCorridorDoorHighlight();
+      });
+    };
+
+    npcChoiceButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        chooseNpcAction(button.dataset.choice);
+      });
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (!npcChoice || npcChoice.hidden) return;
+      const action = event.code === 'KeyW'
+        ? 'investigate'
+        : event.code === 'KeyS'
+          ? 'talk'
+          : event.key === 'Escape'
+            ? 'exit'
+            : null;
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const button = npcChoiceButtons.find(
+        (item) => item.dataset.choice === action
+      );
+      if (button) button.click();
+    }, true);
+
+    const hideDoorChoice = () => {
+      if (doorChoice) doorChoice.hidden = true;
+    };
+
+    const showDoorChoice = (door) => {
+      if (!doorChoice || !door || doorLocked) return;
+      doorLocked = true;
+      keys.clear();
+      if (doorBubble) doorBubble.hidden = true;
+      const bubble = door.bubble || {};
+      doorChoice.style.left = (bubble.left || 0) + '%';
+      doorChoice.style.top = (bubble.top || 0) + '%';
+      doorChoice.style.transform = bubble.transform || 'translate(-8%, -90%)';
+      doorChoice.hidden = false;
     };
 
     const returnTo905Door = () => {
@@ -1811,6 +2869,11 @@
         enterHqBase();
         return;
       }
+      if (analysisStoryProgress.finished &&
+          (door.action === 'visit-901' || door.action === 'return-905')) {
+        showDoorChoice(door);
+        return;
+      }
       if (door.action === 'return-905') {
         returnTo905Door();
         return;
@@ -1820,7 +2883,16 @@
         return;
       }
       if (door.action === 'zone-wait') {
-        showCorridorDoorMessage([
+        showCorridorDoorMessage(analysisStoryProgress.finished ? [
+          '现在还不是上下楼的时候。',
+          {
+            segments: [
+              { text: '（要去' },
+              { text: '提醒老爷爷', warning: true },
+              { text: '）' }
+            ]
+          }
+        ] : [
           '现在还不是上下楼的时候。',
           '先去一次901吧。'
         ]);
@@ -1842,17 +2914,67 @@
       doorLocked = false;
       keys.clear();
       activeDoor = null;
+      activeNpc = null;
+      activeElevator = false;
+      hideDoorChoice();
+      if (npcChoice && !npcChoice.hidden) hideNpcChoice(false);
+      closeCorridorInvestigation();
+      resumeCorridorRitual();
       if (doorBubble) doorBubble.hidden = true;
       if (corridorDialogue) corridorDialogue.hidden = true;
       person.hidden = false;
       updateCorridorDoorHighlight();
     });
 
+    doorChoiceButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const choice = button.dataset.choice;
+        if (choice === 'exit') {
+          hideDoorChoice();
+          doorLocked = false;
+          keys.clear();
+          updateCorridorDoorHighlight();
+          return;
+        }
+        hideDoorChoice();
+        if (choice === 'open') {
+          showCorridorDoorMessage(['（锁住了，需要钥匙）']);
+        } else if (choice === 'knock') {
+          showCorridorDoorMessage(['（没有人）']);
+        }
+      });
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (!doorChoice || doorChoice.hidden) return;
+      const action = event.code === 'KeyW'
+        ? 'open'
+        : event.code === 'KeyS'
+          ? 'knock'
+          : event.key === 'Escape'
+            ? 'exit'
+            : null;
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const button = doorChoiceButtons.find(
+        (item) => item.dataset.choice === action
+      );
+      if (button) button.click();
+    }, true);
+
     if (doorBubble) {
       doorBubble.addEventListener('click', (event) => {
         event.stopPropagation();
         if (!doorBubble.hidden && !doorLocked) {
-          startCorridorDoorInteraction(activeDoor);
+          if (activeNpc) {
+            showNpcChoice(activeNpc);
+          } else if (activeElevator) {
+            triggerElevatorInteraction();
+          } else {
+            startCorridorDoorInteraction(activeDoor);
+          }
         }
       });
     }
@@ -1862,7 +2984,13 @@
         if (doorBubble && !doorBubble.hidden && !doorLocked) {
           event.preventDefault();
           event.stopImmediatePropagation();
-          startCorridorDoorInteraction(activeDoor);
+          if (activeNpc) {
+            showNpcChoice(activeNpc);
+          } else if (activeElevator) {
+            triggerElevatorInteraction();
+          } else {
+            startCorridorDoorInteraction(activeDoor);
+          }
         }
         return;
       }
@@ -1891,6 +3019,12 @@
         keys.clear();
         return;
       }
+      if (ritualState.elevator.boardingLocked &&
+          footInElevator(x, y + halfHeight)) {
+        bounceFromElevator();
+        updateCorridorDoorHighlight();
+        return;
+      }
       let moveX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) -
         (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       let moveY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) -
@@ -1899,6 +3033,12 @@
       const length = Math.hypot(moveX, moveY) || 1;
       moveX = moveX / length * speed * dt;
       moveY = moveY / length * speed * dt;
+      if (ritualState.elevator.boardingLocked &&
+          footInElevator(x + moveX, y + halfHeight + moveY)) {
+        bounceFromElevator();
+        updateCorridorDoorHighlight();
+        return;
+      }
       let appliedX = 0;
       let appliedY = 0;
       if (canStandAt(x + moveX, y + moveY)) {
