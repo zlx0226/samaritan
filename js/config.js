@@ -9,6 +9,21 @@ window.ROOF_UI_CONFIG = {
   /* 设计稿尺寸，仅用于把像素换算成缩放系数，一般不用改 */
   design: { width: 1920, height: 1080 },
 
+  /* Q版角色显示名：overrides 高于 defaults，缺省时回退到角色 id。 */
+  characterNames: {
+    defaults: {
+      K: '女乞丐',
+      bb905: '老头',
+      bb301: '大妈',
+      bb1001: '混混',
+      bb1104: '混混'
+    },
+    overrides: {
+      bb1001: '毛仔',
+      bb1104: '耗子'
+    }
+  },
+
   /* TR1 面板：以左上角为锚点，整体占画面的 62.5%
      宽 1200 = 画面的 62.5%，高按 16:9 自动算（也是 62.5%）
      背景框内侧可用范围约 x 24~1890、y 28~1060，
@@ -220,6 +235,42 @@ window.ROOF_UI_CONFIG = {
      时间均为毫秒，角色 x/y 与背景使用同一套百分比坐标。 */
   corridorRitual: {
     floorTravelMs: 1000,
+    overheard: {
+      charDelayMs: 55,
+      lines: [
+        { speaker: '老头', text: '……房租我下周一定交！', durationMs: 2000 },
+        { speaker: '老头', text: '我这就去找他们还钱！', durationMs: 2000 },
+        { speaker: '老头', text: '麻烦你帮我和他们……', durationMs: 1500 },
+        { speaker: '老头', text: '唉！', durationMs: 1000 }
+      ]
+    },
+    floorElevenConversation: {
+      charDelayMs: 55,
+      lineHoldMs: 900,
+      stepDistance: 2.2,
+      stepOutMs: 180,
+      stepHoldMs: 650,
+      stepBackMs: 180,
+      lines: [
+        { speakerId: 'bb1001', text: '哟哟哟，瞧瞧这是谁来咯？' },
+        { speakerId: 'bb905', text: '钱我会还你们的，一个月之内。' },
+        { speakerId: 'bb1104', text: '一个月？你觉得你现在有什么筹码来讨价还价？！' },
+        { speakerId: 'bb905', text: '你们现在杀了我，也一样拿不到钱。' },
+        { speakerId: 'bb905', text: '倒是你们老大会除了你们，我说得没错吧？' },
+        { speakerId: 'bb1104', text: '但我们有的是本事让你死得痛苦，糟老头子！' },
+        { speakerId: 'bb1001', text: '油嘴滑舌，没有好果子吃！' },
+        { speakerId: 'bb1104', text: '对了，虽然你没有亲戚，可怜的小偷，但你还有个朋友！' },
+        { speakerId: 'bb905', text: '！' },
+        { speakerId: 'bb1104', text: '哈哈，看来我没记错，你和那个904的小毛头玩得不错吧？' },
+        { speakerId: 'bb1104', text: '那你最好为他着想一下！' },
+        { speakerId: 'bb905', text: '……我告诉你钱的位置。' },
+        { speakerId: 'bb905', text: '（写字声）' },
+        { speakerId: 'bb905', text: '就在那儿。' },
+        { speakerId: 'bb1104', text: '你想嘲笑我们不识字吗？来毛仔，给他瞧瞧！' },
+        { speakerId: 'bb1001', text: '（写字声）' },
+        { speakerId: 'bb1104', text: '看到了没？这个点过来！否则我就杀了你那个倒霉的小朋友！' }
+      ]
+    },
     landlady: {
       x: 30.2,
       y: 58.89,
@@ -235,13 +286,35 @@ window.ROOF_UI_CONFIG = {
       x: 23.44,
       y: 58.89,
       startAtMs: 1000,
-      arriveAtMs: 8000,
+      arriveAtMs: 9750,
       boardAtMs: 16000,
       boardedAtMs: 16600,
+      talkLines: [
+        '老头：我有急事，你有什么问题先等会儿。',
+        '……',
+        '老头：你说有人要杀我？你怎么知道？',
+        '……',
+        '老头：你说那两个混混？你认识他们？那你应该知道他们不好惹吧！你难道有什么办法阻止那些为非作歹的混球？',
+        '老头：我好心告诉你这块垃圾之地的生存守则吧！不要多管闲事。走一步算一步。'
+      ],
       sprites: {
-        front: 'assets/BB905_c.png',
+        front: 'assets/BB905.png',
         side: 'assets/BB905_side.png',
-        back: 'assets/BB905_c.png' // 暂无独立背面素材，先使用正面占位
+        back: 'assets/BB905_back.png'
+      },
+      floorElevenMeeting: {
+        path: [
+          { x: 80.1, y: 74.6 },
+          { x: 79.5, y: 70.86 },
+          { x: 79.5, y: 51.89 }
+        ],
+        bb1001: { x: 88.3, y: 51.89 },
+        bb1104: { x: 93.2, y: 51.89 }
+      },
+      floorElevenBeggar: {
+        paper: { left: 56.2, top: 48.5, width: 12.636, height: 8.1 },
+        k: { left: 56.2, top: 42.2, width: 13.5, height: 13.5 },
+        beer: { left: 57, top: 47.5, width: 9 }
       }
     },
     route: {
@@ -251,6 +324,20 @@ window.ROOF_UI_CONFIG = {
       boardX: 80.1,
       boardY: 74.6
     },
+    stairs: {
+      animationMs: 1500,
+      left: { id: 'corridor-box-1', x: 4.5, y: 2.8 },
+      middle: { id: 'corridor-box-2', x: 64.5, y: 92 }
+    },
+    floorLabels: [
+      { left: 11.75, top: 26.4, width: 5.8, height: 4 },
+      { left: 33.55, top: 26.4, width: 5.8, height: 4 },
+      { left: 57, top: 26.4, width: 5.8, height: 4 },
+      { left: 79, top: 26.4, width: 5.8, height: 4 },
+      { left: 11.75, top: 63.35, width: 5.8, height: 4 },
+      { left: 33.55, top: 63.35, width: 5.8, height: 4 },
+      { left: 84.45, top: 61.3, width: 5.8, height: 5.6 }
+    ],
     elevator: {
       area: [74.3, 84.7, 84.6, 100],
       approachArea: [74.3, 78.89, 84.6, 84.7],
@@ -259,15 +346,16 @@ window.ROOF_UI_CONFIG = {
         top: 78.2,
         transform: 'translate(-50%, -50%)'
       },
-      display: { left: 79, top: 90 },
+      display: { left: 78.75, top: 90 },
+      dwellMs: 5000,
       currentFloor: 9,
       bottomFloor: 3,
-      topFloor: 12,
+      topFloor: 11,
       leavesNinthAtMs: 4000,
       reachesBottomAtMs: 10000,
       returnsToNinthAtMs: 16000,
       leavesNinthForTopAtMs: 16600,
-      reachesTopAtMs: 19600
+      reachesTopAtMs: 18600
     },
     npcInteractionRadius: 9
   },
@@ -645,23 +733,23 @@ window.ROOF_UI_CONFIG.optionSubs = {
    dx / dy 是相对锚点中心的偏移（设计像素），height 是显示高度；
    canvas / box 是素材的画布尺寸和人物包围盒（像素），用来裁掉透明边距。 */
 window.ROOF_UI_CONFIG.sprites = [
-  { id: 'K',      src: 'assets/K.png',           anchor: 'stair-left', dx: 0,   dy: 0,
+  { id: 'K',      src: 'assets/K_bw.png',        anchor: 'stair-left', dx: 0,   dy: 0,
     height: 96,  squash: 1,    canvas: [256, 256],     box: [62, 16, 107, 237] },
-  { id: 'bb905',  src: 'assets/BB905.png',       anchor: 'new-1',      dx: 0,   dy: 16,
+  { id: 'bb905',  src: 'assets/BB905_bw.png',    anchor: 'new-1',      dx: 0,   dy: 16,
     height: 104, squash: 0.88, canvas: [3000, 3000],   box: [736, 178, 1235, 2807] },
   /* 1001b / b2 来回切换（通讯界面里跑） */
   { id: 'bb1001', anchor: 'bb905', dx: 0, dy: 106, height: 100, squash: 0.88,
     frameMs: 680,
     frames: [
-      { src: 'assets/BB1001_back_b.png',  canvas: [3000, 3000], box: [900, 207, 1441, 2767] },
-      { src: 'assets/BB1001_back_b2.png', canvas: [3000, 3000], box: [900, 87, 1339, 2887] }
+      { src: 'assets/BB1001_bw_back_b.png',  canvas: [3000, 3000], box: [900, 207, 1441, 2767] },
+      { src: 'assets/BB1001_bw_back_b2.png', canvas: [3000, 3000], box: [900, 87, 1339, 2887] }
     ] },
   /* 1104 / 1104_side 左右镜像慢速切换，面前带红色警戒光 */
   { id: 'bb1104', anchor: 'bb905', dx: -100, dy: -8, height: 100, squash: 0.88,
     frameMs: 2800,
     frames: [
-      { src: 'assets/BB1104.png',      canvas: [3000, 3000], box: [855, 177, 1114, 2794], tilt: -90, clip: 'down' },
-      { src: 'assets/BB1104_side_mirror.png', canvas: [3000, 3000], box: [1170, 180, 928, 2791], tilt: -16, clip: 'left' }
+      { src: 'assets/BB1104_bw.png',      canvas: [3000, 3000], box: [855, 177, 1114, 2794], tilt: -90, clip: 'down' },
+      { src: 'assets/BB1104_bw_side_mirror.png', canvas: [3000, 3000], box: [1170, 180, 928, 2791], tilt: -16, clip: 'left' }
     ],
     vision: { width: 360, height: 260 } }
 ];

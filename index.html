@@ -7,8 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Samaritan · ROOF / TR1</title>
-  <link rel="stylesheet" href="css/style.css?v=20261105-corridor9">
-  <link rel="stylesheet" href="css/room-story.css?v=20261105-corridor9">
+  <link rel="stylesheet" href="css/style.css?v=20261111-dialogue3">
+  <link rel="stylesheet" href="css/room-story.css?v=20261111-dialogue3">
   <link rel="preload" as="image" href="assets/P.png">
   <link rel="preload" as="image" href="assets/P_side.png">
   <link rel="preload" as="image" href="assets/P_back.png">
@@ -54,11 +54,39 @@
         <span id="corridorElevatorFloor"></span>
       </div>
       <img class="corridor-npc corridor-old-man" id="corridorOldMan"
+           data-room-character
            src="assets/BB905_side.png" alt="905老头" hidden>
+      <div class="q-name-tag corridor-character-name" id="corridorOldManName"
+           data-character-id="bb905">老头</div>
       <img class="corridor-npc corridor-landlady" id="corridorLandlady"
-           src="assets/BB301_side.png" alt="301包租婆" hidden>
-      <img class="corridor-person" id="corridorPerson"
+           data-room-character
+           src="assets/BB301_side.png" alt="301大妈" hidden>
+      <div class="q-name-tag corridor-character-name" id="corridorLandladyName"
+           data-character-id="bb301">大妈</div>
+      <img class="corridor-npc corridor-bb1001" id="corridorBb1001"
+           data-room-character
+           src="assets/BB1001_side.png" alt="毛仔" hidden>
+      <div class="q-name-tag corridor-character-name" id="corridorBb1001Name"
+           data-character-id="bb1001" hidden>混混</div>
+      <img class="corridor-npc corridor-bb1104" id="corridorBb1104"
+           data-room-character
+           src="assets/BB1104_side.png" alt="耗子" hidden>
+      <div class="q-name-tag corridor-character-name" id="corridorBb1104Name"
+           data-character-id="bb1104" hidden>混混</div>
+      <div class="corridor-eleven-beggar" id="corridorElevenBeggar" hidden>
+        <img class="corridor-beggar-paper" id="corridorBeggarPaper"
+             src="assets/beggarpaper.png" alt="">
+        <img class="corridor-beggar-k" id="corridorBeggarK"
+             src="assets/K_sit.png" alt="女乞丐">
+        <div class="q-name-tag corridor-beggar-name" id="corridorBeggarName"
+             data-character-id="K">女乞丐</div>
+        <img class="corridor-beggar-beer" id="corridorBeggarBeer"
+             src="assets/beggarbeer.png" alt="">
+      </div>
+      <img class="corridor-person" id="corridorPerson" data-room-character
            src="assets/P_side.png" alt="" hidden>
+      <img class="corridor-speaking-bubble" id="corridorSpeakingBubble"
+           src="assets/speech_bubble.png" alt="" hidden>
       <img class="room-interaction-bubble" id="corridorInteractionBubble"
            src="assets/interaction_bubble.png" alt="按 E 互动" hidden>
       <div class="room-character-choice corridor-npc-choice"
@@ -73,9 +101,43 @@
         <button type="button" data-choice="knock">S敲门</button>
         <button type="button" data-choice="exit">ESC退出</button>
       </div>
+      <div class="room-character-choice corridor-stair-choice"
+           id="corridorStairChoice" hidden>
+        <button type="button" data-choice="up">W上楼</button>
+        <button type="button" data-choice="down">S下楼</button>
+        <button type="button" data-choice="exit">ESC退出</button>
+      </div>
       <div class="room-dialogue corridor-dialogue" id="corridorDialogue" hidden>
         <div class="room-dialogue-name" id="corridorDialogueName" hidden></div>
         <div class="room-dialogue-text" id="corridorDialogueText" aria-live="polite"></div>
+      </div>
+      <div class="corridor-overheard" id="corridorOverheard" hidden>
+        <div class="corridor-overheard-box">
+          <span class="corridor-overheard-name" id="corridorOverheardName"></span><span
+            class="corridor-overheard-text" id="corridorOverheardText"
+            aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="elevator-scene" id="elevatorScene" hidden aria-label="电梯">
+      <div class="elevator-viewport" id="elevatorViewport">
+        <img class="elevator-background" src="assets/elevator.jpg" alt="">
+        <img class="elevator-player" src="assets/P.png" alt="">
+      </div>
+      <div class="elevator-floor-readout">
+        <span>当前楼层</span>
+        <strong id="elevatorSceneFloor">9F</strong>
+      </div>
+      <div class="elevator-button-panel" id="elevatorFloorButtons"></div>
+      <button class="elevator-leave-button" id="elevatorLeaveButton"
+              type="button" hidden>离开</button>
+      <div class="room-dialogue elevator-dialogue" id="elevatorDialogue" hidden>
+        <div class="room-dialogue-text" id="elevatorDialogueText"
+             aria-live="polite"></div>
+        <div class="room-dialogue-bottom-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
       </div>
     </section>
 
@@ -291,10 +353,18 @@
       <div class="game-debug-jump">
         <label for="gameDebugInput">调试模式</label>
         <input id="gameDebugInput" type="text" inputmode="numeric"
-               maxlength="1" autocomplete="off" placeholder="1 / 2 / 3 / 4">
+               maxlength="1" autocomplete="off" placeholder="1 / 2 / 3 / 4 / 5 / 6">
       </div>
       <button class="game-start" id="gameStart" type="button">开始</button>
       <div class="game-cover-line" id="gameCoverLine" aria-live="polite">……嘿！醒醒！</div>
+    </div>
+
+    <div class="room-dialogue novice-guidance" id="noviceGuidance" hidden>
+      <div class="room-dialogue-text" id="noviceGuidanceText"
+           aria-live="polite"></div>
+      <div class="room-dialogue-bottom-dots" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
     </div>
 
     <div class="investigation-overlay" id="investigationOverlay" hidden>
@@ -317,8 +387,9 @@
         <img class="room-layer room-carpet" src="assets/carpet.png" alt="">
         <img class="room-person" id="roomPerson" data-room-character src="assets/P_lie.png" alt="">
         <img class="room-elder" id="roomElder" data-room-character
-             src="assets/BB905_c.png" alt="">
-        <div class="room-elder-name" id="roomElderName" hidden>905老头</div>
+             src="assets/BB905.png" alt="">
+        <div class="room-elder-name" id="roomElderName"
+             data-character-id="bb905">老头</div>
         <div class="room-elder-speech" id="roomElderSpeech" hidden aria-label="905 正在说话">
           <img src="assets/speech_bubble.png" alt="">
         </div>
@@ -363,8 +434,8 @@
     <div class="dev-panel" id="devPanel" hidden></div>
   </div>
 
-  <script src="js/config.js?v=20261105-corridor9"></script>
-  <script src="js/room-story.js?v=20261105-corridor9"></script>
-  <script src="js/main.js?v=20261105-corridor9"></script>
+  <script src="js/config.js?v=20261111-dialogue3"></script>
+  <script src="js/room-story.js?v=20261111-dialogue3"></script>
+  <script src="js/main.js?v=20261111-dialogue3"></script>
 </body>
 </html>

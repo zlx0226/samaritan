@@ -868,8 +868,14 @@ body.is-booting .stage {
 .sprite {
   position: absolute;
   transform: translate(-50%, -50%);
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
+}
+
+.sprite-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .sprite img {
@@ -879,13 +885,28 @@ body.is-booting .stage {
   user-select: none;
 }
 
+.sprite-name {
+  position: absolute;
+  left: 50%;
+  top: 5%;
+  transform: translate(-50%, calc(-100% - 4 * var(--u)));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0b3a2c;
+  font: 700 calc(15 * var(--u)) / 1.1 "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  letter-spacing: .05em;
+  text-shadow: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(255, 255, 255, .45);
+  white-space: nowrap;
+}
+
 .sprite-speech-bubble {
   position: absolute;
   width: calc(74 * var(--u));
   height: calc(74 * var(--u));
   transform: translate(calc(4 * var(--u)), calc(-78 * var(--u)));
   pointer-events: none;
-  z-index: 9;
+  z-index: 9500;
 }
 
 .sprite-speech-bubble img {
@@ -902,7 +923,7 @@ body.is-booting .stage {
   font: 900 calc(34 * var(--u)) / 1 Consolas, "Cascadia Mono", monospace;
   text-shadow: 0 0 calc(8 * var(--u)) rgba(255, 59, 48, .8);
   pointer-events: none;
-  z-index: 10;
+  z-index: 9500;
   animation: surprise-alert .6s ease-out both;
 }
 
@@ -917,7 +938,7 @@ body.is-booting .stage {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: 9000;
   mix-blend-mode: screen;
   opacity: 0;
   transition: opacity .35s ease;

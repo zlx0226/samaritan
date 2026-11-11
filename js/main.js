@@ -41,6 +41,13 @@
   };
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
   const round2 = (v) => Math.round(v * 100) / 100;
+  const characterName = (id) => {
+    if (window.SamaritanNames) return window.SamaritanNames.get(id);
+    const names = CFG.characterNames || {};
+    return (names.overrides && names.overrides[id]) ||
+      (names.defaults && names.defaults[id]) ||
+      id;
+  };
 
   /* ---------------- 布局 ---------------- */
 
@@ -518,6 +525,7 @@
   let speechBubbleTimer = null;
   let alertEls = [];
   let alertTimer = null;
+  let spriteDepthTimer = null;
   const sprites = new Map();        // id -> { cfg, el }
   const spriteOverrides = new Map(); // id -> { x, y }（执行模式下 K 可以离开锚点）
 
@@ -537,9 +545,19 @@
       const el = document.createElement('div');
       el.className = 'sprite';
       el.dataset.id = sp.id;
+      const art = document.createElement('div');
+      art.className = 'sprite-art';
       const img = document.createElement('img');
       img.alt = '';
-      el.appendChild(img);
+      art.appendChild(img);
+      el.appendChild(art);
+      const name = document.createElement('span');
+      name.className = 'sprite-name';
+      name.dataset.characterId = sp.id;
+      name.textContent = characterName(sp.id);
+      name.style.fontSize =
+        'calc(' + (sp.height * 0.14).toFixed(2) + ' * var(--u))';
+      el.appendChild(name);
       spriteLayer.appendChild(el);
       const item = { cfg: sp, el: el, step: 0, timer: null, visionEl: null, visionFrameEl: null };
 
@@ -564,6 +582,7 @@
       applyFrame(item, 0);
     });
     layoutSprites();
+    startSpriteDepthTracking();
   }
 
   function spriteFrames(sp) {
@@ -660,6 +679,25 @@
         item.visionEl.style.top = (y / roof.h * 100).toFixed(3) + '%';
       }
     });
+  }
+
+  function startSpriteDepthTracking() {
+    if (spriteDepthTimer) return;
+    const updateDepths = () => {
+      if (!spriteLayer) return;
+      const stageRect = spriteLayer.getBoundingClientRect();
+      sprites.forEach((item) => {
+        if (!item.el || !item.el.querySelector('img')?.getAttribute('src')) {
+          return;
+        }
+        const rect = item.el.getBoundingClientRect();
+        item.el.style.zIndex = String(
+          100 + Math.round(rect.bottom - stageRect.top)
+        );
+      });
+    };
+    updateDepths();
+    spriteDepthTimer = setInterval(updateDepths, 16);
   }
 
   /* ---------------- 右侧框的编辑界面（小旗 → 指令） ---------------- */
@@ -2204,31 +2242,31 @@
 
   function setKFront(preserveTransform) {
     setSpriteImage(
-      'K', 'assets/K.png', [256, 256], [62, 15, 108, 238], false, preserveTransform
+      'K', 'assets/K_bw.png', [256, 256], [62, 15, 108, 238], false, preserveTransform
     );
   }
 
   function setKOrientation(dx, dy) {
     if (Math.abs(dy) >= Math.abs(dx)) {
       if (dy < 0) {
-        setSpriteImage('K', 'assets/K_back.png', [3000, 3000], [786, 190, 1234, 2789], false);
+        setSpriteImage('K', 'assets/K_bw_back.png', [3000, 3000], [786, 190, 1234, 2789], false);
       } else {
         setKFront();
       }
     } else if (dx < 0) {
-      setSpriteImage('K', 'assets/K_side.png', [3000, 3000], [824, 185, 1341, 2777], false);
+      setSpriteImage('K', 'assets/K_bw_side.png', [3000, 3000], [824, 185, 1341, 2777], false);
     } else {
-      setSpriteImage('K', 'assets/K_side.png', [3000, 3000], [824, 185, 1341, 2777], true);
+      setSpriteImage('K', 'assets/K_bw_side.png', [3000, 3000], [824, 185, 1341, 2777], true);
     }
   }
 
   function setPersuasionCast(climb) {
     if (climb) {
-      setSpriteImage('bb1104', 'assets/BB1104.png', [3000, 3000], [853, 175, 1118, 2798], false);
-      setSpriteImage('bb1001', 'assets/BB1001_b.png', [3000, 3000], [191, 197, 1780, 2776], false);
+      setSpriteImage('bb1104', 'assets/BB1104_bw.png', [3000, 3000], [853, 175, 1118, 2798], false);
+      setSpriteImage('bb1001', 'assets/BB1001_bw_b.png', [3000, 3000], [191, 197, 1780, 2776], false);
     } else {
-      setSpriteImage('bb1104', 'assets/BB1104_side_mirror.png', [3000, 3000], [1170, 180, 928, 2791], false);
-      setSpriteImage('bb1001', 'assets/BB1001_side_b.png', [3000, 3000], [320, 208, 1839, 2765], false);
+      setSpriteImage('bb1104', 'assets/BB1104_bw_side_mirror.png', [3000, 3000], [1170, 180, 928, 2791], false);
+      setSpriteImage('bb1001', 'assets/BB1001_bw_side_b.png', [3000, 3000], [320, 208, 1839, 2765], false);
     }
     const v = sprites.get('bb1104');
     if (v && v.visionFrameEl) v.visionFrameEl.style.opacity = '0';
@@ -2980,20 +3018,20 @@
       const dy = k.y - p.y;
       if (Math.abs(dx) < Math.abs(dy)) {
         if (id === 'bb1104') {
-          setSpriteImage('bb1104', 'assets/BB1104.png', [3000, 3000], [853, 175, 1118, 2798], false);
+          setSpriteImage('bb1104', 'assets/BB1104_bw.png', [3000, 3000], [853, 175, 1118, 2798], false);
         } else {
-          setSpriteImage('bb1001', 'assets/BB1001_b.png', [3000, 3000], [191, 197, 1780, 2776], false);
+          setSpriteImage('bb1001', 'assets/BB1001_bw_b.png', [3000, 3000], [191, 197, 1780, 2776], false);
         }
       } else if (id === 'bb1104') {
         if (dx < 0) {
-          setSpriteImage('bb1104', 'assets/BB1104_side_mirror.png', [3000, 3000], [1170, 180, 928, 2791], false);
+          setSpriteImage('bb1104', 'assets/BB1104_bw_side_mirror.png', [3000, 3000], [1170, 180, 928, 2791], false);
         } else {
-          setSpriteImage('bb1104', 'assets/BB1104_side.png', [3000, 3000], [903, 180, 928, 2791], false);
+          setSpriteImage('bb1104', 'assets/BB1104_bw_side.png', [3000, 3000], [903, 180, 928, 2791], false);
         }
       } else if (dx < 0) {
-        setSpriteImage('bb1001', 'assets/BB1001_side_b.png', [3000, 3000], [320, 208, 1839, 2765], false);
+        setSpriteImage('bb1001', 'assets/BB1001_bw_side_b.png', [3000, 3000], [320, 208, 1839, 2765], false);
       } else {
-        setSpriteImage('bb1001', 'assets/BB1001_side_b.png', [3000, 3000], [320, 208, 1839, 2765], true);
+        setSpriteImage('bb1001', 'assets/BB1001_bw_side_b.png', [3000, 3000], [320, 208, 1839, 2765], true);
       }
     };
     face('bb1104');

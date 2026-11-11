@@ -2,6 +2,10 @@
   'use strict';
 
   const CFG = window.ROOF_UI_CONFIG;
+  const characterKnowledge = window.SAMARITAN_CHARACTER_KNOWLEDGE || {
+    analyzedProfiles: new Set()
+  };
+  window.SAMARITAN_CHARACTER_KNOWLEDGE = characterKnowledge;
   let stage = null;
   let startPrologue = null;
   const roomProgress = {
@@ -176,13 +180,14 @@
     pausedAt: null,
     pausedMs: 0
   };
+  let activeNoviceGuidance = null;
 
-  function startCorridorRitual() {
+  function startCorridorRitual(startElapsedMs = 0) {
     if (corridorRitualClock.started || !analysisProgress.completedOnce) {
       return false;
     }
     corridorRitualClock.started = true;
-    corridorRitualClock.startedAt = performance.now();
+    corridorRitualClock.startedAt = performance.now() - startElapsedMs;
     corridorRitualClock.pausedAt = null;
     corridorRitualClock.pausedMs = 0;
     window.dispatchEvent(new CustomEvent('game:corridor-ritual-start'));
@@ -217,6 +222,108 @@
     );
   }
 
+  function showNoviceGuidance() {
+    if (activeNoviceGuidance) return activeNoviceGuidance;
+    const box = document.getElementById('noviceGuidance');
+    const text = document.getElementById('noviceGuidanceText');
+    if (!box || !text) return Promise.resolve();
+    const ownsPause = corridorRitualClock.pausedAt === null;
+    if (ownsPause) pauseCorridorRitual();
+    if (stage) stage.classList.add('is-novice-guidance');
+    const lines = [
+      [
+        { text: '（混混的地点，大概是他们常在的地方，' },
+        { text: '电脑', className: 'novice-blue' },
+        { text: '上可能有线索。）' }
+      ],
+      [
+        { text: '（回忆一下老爷爷的' },
+        { text: '话', className: 'novice-blue' },
+        { text: '和' },
+        { text: '行动', className: 'novice-blue' },
+        { text: '可能也有帮助。）' }
+      ]
+    ];
+    let lineIndex = 0;
+    let charCount = 0;
+    let timer = null;
+    const totalChars = (line) => line.reduce(
+      (sum, segment) => sum + Array.from(segment.text).length,
+      0
+    );
+    const renderLine = (line, count) => {
+      text.textContent = '';
+      let remaining = count;
+      line.forEach((segment) => {
+        if (remaining <= 0) return;
+        const chars = Array.from(segment.text);
+        const visible = chars.slice(0, remaining).join('');
+        if (!visible) return;
+        const span = document.createElement('span');
+        if (segment.className) span.className = segment.className;
+        span.textContent = visible;
+        text.appendChild(span);
+        remaining -= chars.length;
+      });
+    };
+    activeNoviceGuidance = new Promise((resolve) => {
+      const finishTyping = () => {
+        if (!timer) return;
+        clearInterval(timer);
+        timer = null;
+        renderLine(lines[lineIndex], totalChars(lines[lineIndex]));
+      };
+      const cleanup = () => {
+        if (timer) clearInterval(timer);
+        timer = null;
+        box.hidden = true;
+        box.removeEventListener('click', advance);
+        window.removeEventListener('keydown', onKey);
+        if (stage) stage.classList.remove('is-novice-guidance');
+        if (ownsPause) resumeCorridorRitual();
+        activeNoviceGuidance = null;
+        window.dispatchEvent(new CustomEvent('game:novice-guidance-close'));
+        resolve();
+      };
+      const advance = (event) => {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        if (timer) {
+          finishTyping();
+          return;
+        }
+        if (lineIndex < lines.length - 1) {
+          lineIndex += 1;
+          showLine();
+        } else {
+          cleanup();
+        }
+      };
+      const onKey = (event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        advance(event);
+      };
+      const showLine = () => {
+        if (timer) clearInterval(timer);
+        charCount = 0;
+        renderLine(lines[lineIndex], 0);
+        timer = setInterval(() => {
+          charCount += 1;
+          renderLine(lines[lineIndex], charCount);
+          if (charCount >= totalChars(lines[lineIndex])) finishTyping();
+        }, 38);
+      };
+      box.hidden = false;
+      box.addEventListener('click', advance);
+      window.addEventListener('keydown', onKey);
+      showLine();
+    });
+    window.dispatchEvent(new CustomEvent('game:novice-guidance-open'));
+    return activeNoviceGuidance;
+  }
+
   function pointInPolygon(p, poly) {
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -228,6 +335,82 @@
       }
     }
     return inside;
+  }
+
+  function characterDisplayName(id) {
+    if (id === 'bb1104' && !characterKnowledge.analyzedProfiles.has('haozi')) {
+      return '混混';
+    }
+    if (id === 'bb1001' && !characterKnowledge.analyzedProfiles.has('maozi')) {
+      return '混混';
+    }
+    const names = CFG.characterNames || {};
+    return (names.overrides && names.overrides[id]) ||
+      (names.defaults && names.defaults[id]) ||
+      id;
+  }
+
+  function refreshCharacterNameLabels(root = document) {
+    root.querySelectorAll('[data-character-id]').forEach((element) => {
+      element.textContent = characterDisplayName(element.dataset.characterId);
+    });
+  }
+  window.SamaritanNames = {
+    isAnalyzed(profileId) {
+      return characterKnowledge.analyzedProfiles.has(profileId);
+    },
+    get(characterId) {
+      return characterDisplayName(characterId);
+    },
+    markAnalyzed(profileId) {
+      if (characterKnowledge.analyzedProfiles.has(profileId)) return false;
+      characterKnowledge.analyzedProfiles.add(profileId);
+      refreshCharacterNameLabels();
+      window.dispatchEvent(new CustomEvent('game:character-name-update', {
+        detail: { profile: profileId }
+      }));
+      return true;
+    }
+  };
+
+  function fitNameTagToSprite(nameElement, spriteElement, ratio = .11) {
+    if (!nameElement || !spriteElement) return;
+    const height = spriteElement.offsetHeight;
+    if (!height) return;
+    nameElement.style.fontSize = Math.max(9, height * ratio).toFixed(2) + 'px';
+  }
+
+  function spriteSpanPercent(spriteElement, axis = 'height') {
+    if (!spriteElement || !stage) return 0;
+    const spriteSize = axis === 'width'
+      ? spriteElement.offsetWidth
+      : spriteElement.offsetHeight;
+    const stageSize = axis === 'width'
+      ? stage.offsetWidth
+      : stage.offsetHeight;
+    return stageSize ? spriteSize / stageSize * 100 : 0;
+  }
+
+  function positionNameAtSpriteCenter(
+    nameElement,
+    spriteElement,
+    nameRaiseRatio = 0,
+    extraDropRatio = 0
+  ) {
+    if (!nameElement || !spriteElement) return;
+    const parent = spriteElement.offsetParent || spriteElement.parentElement;
+    if (!parent) return;
+    const centerX = spriteElement.offsetLeft / parent.offsetWidth * 100;
+    const centerY = spriteElement.offsetTop / parent.offsetHeight * 100;
+    if (isFinite(centerX)) nameElement.style.left = centerX + '%';
+    if (isFinite(centerY)) {
+      nameElement.style.top = (
+        centerY - 10.5 +
+        spriteSpanPercent(spriteElement) *
+          (.1 - nameRaiseRatio + extraDropRatio)
+      ) + '%';
+    }
+    fitNameTagToSprite(nameElement, spriteElement);
   }
 
   function oldManInvestigationData(visitedCorridor) {
@@ -863,6 +1046,7 @@
     completedVoiceProfiles.add(activeVoiceProfile.id);
     if (voice) voice.classList.add('is-speaker-final');
     if (status) status.hidden = true;
+    window.SamaritanNames.markAnalyzed(activeVoiceProfile.id);
     const systemStatus = document.getElementById('analysisSystemStatus');
     const signalState = document.getElementById('analysisSignalState');
     if (systemStatus) systemStatus.textContent = 'VOICE MATCH';
@@ -1380,11 +1564,18 @@
     const line = document.getElementById('gameCoverLine');
     const elderSpeech = document.getElementById('roomElderSpeech');
     const roomPerson = document.getElementById('roomPerson');
+    const roomElder = document.getElementById('roomElder');
+    const roomElderName = document.getElementById('roomElderName');
     const roomDialogue = document.getElementById('roomDialogue');
     const roomDialogueName = document.getElementById('roomDialogueName');
     const roomDialogueText = document.getElementById('roomDialogueText');
     let roomPlotStarted = false;
     if (!cover || !button) return;
+    if (roomElderName) {
+      roomElderName.textContent = characterDisplayName('bb905');
+      roomElderName.hidden = false;
+      positionNameAtSpriteCenter(roomElderName, roomElder);
+    }
     buildCorridorCollisionDebug();
     buildHqInteractionAreas();
     buildHq2InteractionAreas();
@@ -1559,6 +1750,53 @@
         enterHqBase();
         return;
       }
+      if (debugMode === '5') {
+        cover.hidden = true;
+        if (roomScene) roomScene.hidden = true;
+        analysisProgress.started = true;
+        analysisProgress.complete = true;
+        analysisProgress.completedOnce = true;
+        analysisStoryProgress.seen = true;
+        analysisStoryProgress.active = false;
+        analysisStoryProgress.finished = true;
+        startCorridorRitual(16600);
+        const corridorScene = document.getElementById('corridorScene');
+        const corridorPerson = document.getElementById('corridorPerson');
+        if (corridorScene) corridorScene.hidden = false;
+        if (corridorPerson) corridorPerson.hidden = false;
+        beginCorridorPlayerMovement(corridorPerson);
+        window.dispatchEvent(new CustomEvent('corridor:resume', {
+          detail: { x: 23.44, y: 58.89, facing: 'right' }
+        }));
+        return;
+      }
+      if (debugMode === '6') {
+        cover.hidden = true;
+        if (roomScene) roomScene.hidden = true;
+        analysisProgress.started = true;
+        analysisProgress.complete = true;
+        analysisProgress.completedOnce = true;
+        analysisStoryProgress.seen = true;
+        analysisStoryProgress.active = false;
+        analysisStoryProgress.finished = true;
+        startCorridorRitual(20600);
+        const corridorScene = document.getElementById('corridorScene');
+        const corridorPerson = document.getElementById('corridorPerson');
+        if (corridorScene) corridorScene.hidden = false;
+        if (corridorPerson) corridorPerson.hidden = false;
+        beginCorridorPlayerMovement(corridorPerson);
+        window.dispatchEvent(new CustomEvent('corridor:resume', {
+          detail: {
+            x: 79.3,
+            y: 76.2,
+            facing: 'up',
+            floor: 11,
+            servicesUnlocked: true,
+            departureDialogueHandled: true
+          }
+        }));
+        return;
+      }
       if (demoStartInComms) {
         cover.hidden = true;
         if (roomScene) roomScene.hidden = true;
@@ -1692,6 +1930,7 @@
     const investigationBig = document.getElementById('investigationBig');
     const investigationInfo = document.getElementById('investigationInfo');
     const investigationExit = document.getElementById('investigationExit');
+    const roomElder = document.getElementById('roomElder');
     const roomElderName = document.getElementById('roomElderName');
     const interactions = CFG.roomInteractions || [];
     const interactionRadius = M.interactionRadius || 14;
@@ -1726,7 +1965,10 @@
     };
 
     const refreshElderName = () => {
-      if (roomElderName) roomElderName.hidden = !roomProgress.visitedCorridor;
+      if (!roomElderName) return;
+      roomElderName.textContent = characterDisplayName('bb905');
+      roomElderName.hidden = false;
+      positionNameAtSpriteCenter(roomElderName, roomElder);
     };
 
     const showInvestigation = (target) => {
@@ -2196,6 +2438,7 @@
     };
 
     const doorInteractions = CFG.corridorInteractions || [];
+    const corridorScene = document.getElementById('corridorScene');
     const doorBubble = document.getElementById('corridorInteractionBubble');
     const corridorDialogue = document.getElementById('corridorDialogue');
     const corridorDialogueName = document.getElementById('corridorDialogueName');
@@ -2204,27 +2447,86 @@
     const doorChoiceButtons = doorChoice
       ? Array.from(doorChoice.querySelectorAll('button'))
       : [];
+    const stairChoice = document.getElementById('corridorStairChoice');
+    const stairChoiceButtons = stairChoice
+      ? Array.from(stairChoice.querySelectorAll('button'))
+      : [];
     const npcChoice = document.getElementById('corridorNpcChoice');
     const npcChoiceButtons = npcChoice
       ? Array.from(npcChoice.querySelectorAll('button'))
       : [];
     const oldManElement = document.getElementById('corridorOldMan');
     const landladyElement = document.getElementById('corridorLandlady');
+    const bb1001Element = document.getElementById('corridorBb1001');
+    const bb1104Element = document.getElementById('corridorBb1104');
+    const elevenBeggarElement = document.getElementById('corridorElevenBeggar');
+    const beggarPaperElement = document.getElementById('corridorBeggarPaper');
+    const beggarKElement = document.getElementById('corridorBeggarK');
+    const beggarNameElement = document.getElementById('corridorBeggarName');
+    const beggarBeerElement = document.getElementById('corridorBeggarBeer');
+    const oldManNameElement = document.getElementById('corridorOldManName');
+    const landladyNameElement = document.getElementById('corridorLandladyName');
+    const bb1001NameElement = document.getElementById('corridorBb1001Name');
+    const bb1104NameElement = document.getElementById('corridorBb1104Name');
+    const corridorSpeakingBubble =
+      document.getElementById('corridorSpeakingBubble');
     const elevatorDisplay = document.getElementById('corridorElevatorDisplay');
     const elevatorFloor = document.getElementById('corridorElevatorFloor');
+    const overheard = document.getElementById('corridorOverheard');
+    const overheardName = document.getElementById('corridorOverheardName');
+    const overheardText = document.getElementById('corridorOverheardText');
     const investigationOverlay = document.getElementById('investigationOverlay');
     const investigationName = document.getElementById('investigationName');
     const investigationBig = document.getElementById('investigationBig');
     const investigationInfo = document.getElementById('investigationInfo');
     const investigationExit = document.getElementById('investigationExit');
+    const elevatorScene = document.getElementById('elevatorScene');
+    const elevatorSceneFloor = document.getElementById('elevatorSceneFloor');
+    const elevatorFloorButtons = document.getElementById('elevatorFloorButtons');
+    const elevatorLeaveButton = document.getElementById('elevatorLeaveButton');
+    const elevatorDialogue = document.getElementById('elevatorDialogue');
+    const elevatorDialogueText = document.getElementById('elevatorDialogueText');
+    if (oldManNameElement) {
+      oldManNameElement.textContent = characterDisplayName('bb905');
+    }
+    if (landladyNameElement) {
+      landladyNameElement.textContent = characterDisplayName('bb301');
+    }
+    if (bb1001NameElement) {
+      bb1001NameElement.textContent = characterDisplayName('bb1001');
+    }
+    if (bb1104NameElement) {
+      bb1104NameElement.textContent = characterDisplayName('bb1104');
+    }
+    if (beggarNameElement) {
+      beggarNameElement.textContent = characterDisplayName('K');
+    }
     const ritualConfig = CFG.corridorRitual || {};
+    const overheardConfig = ritualConfig.overheard || {};
     const ritualRoute = ritualConfig.route || {};
     const oldManConfig = ritualConfig.oldMan || {};
     const landladyConfig = ritualConfig.landlady || {};
     const elevatorConfig = ritualConfig.elevator || {};
+    const stairConfig = ritualConfig.stairs || {};
+    const floorElevenConversationConfig =
+      ritualConfig.floorElevenConversation || {};
+    const beggarConfig = oldManConfig.floorElevenBeggar || {};
+    const floorLabelLayout = ritualConfig.floorLabels || [];
     const elevatorArea = elevatorConfig.area || [74.3, 84.7, 84.6, 100];
     const elevatorApproachArea =
       elevatorConfig.approachArea || [74.3, 78.89, 84.6, 84.7];
+    const placeBeggarImage = (element, placement) => {
+      if (!element || !placement) return;
+      element.style.left = placement.left + '%';
+      element.style.top = placement.top + '%';
+      element.style.width = placement.width + '%';
+      if (placement.height != null) {
+        element.style.height = placement.height + '%';
+      }
+    };
+    placeBeggarImage(beggarPaperElement, beggarConfig.paper);
+    placeBeggarImage(beggarKElement, beggarConfig.k);
+    placeBeggarImage(beggarBeerElement, beggarConfig.beer);
     if (elevatorDisplay) {
       const display = elevatorConfig.display || {};
       elevatorDisplay.style.left = (display.left || 79.35) + '%';
@@ -2233,10 +2535,85 @@
     let activeDoor = null;
     let activeNpc = null;
     let activeElevator = false;
+    let activeStairDoor = null;
     let npcChoiceTarget = null;
     let doorLocked = false;
     let corridorInvestigationOpen = false;
+    let corridorServicesUnlocked = false;
+    let corridorFloor = 9;
+    let floorElevenLocked = false;
+    let stairTransitioning = false;
+    let elevatorEntered = false;
+    const elevatorRide = {
+      floor: 9,
+      exactFloor: 9,
+      targetFloor: null,
+      direction: 0,
+      requests: new Set(),
+      moving: false,
+      arrived: true,
+      timer: null,
+      dwellTimer: null
+    };
+    const elevatorSummon = {
+      requested: false,
+      targetFloor: null,
+      fromFloor: null,
+      departAt: null,
+      arriveAt: null
+    };
+    let forcedOldManDirection = null;
+    let oldManDepartureDialogueShown = false;
     let lastElevatorFloor = '';
+    let lastOverheardLine = -1;
+    let lastOverheardChars = -1;
+    const floorElevenOverheard = {
+      active: false,
+      done: false,
+      startedAt: 0,
+      lineIndex: -1,
+      charCount: -1
+    };
+    const floorElevenStepOffsets = {
+      bb905: { x: 0 },
+      bb1001: { x: 0 },
+      bb1104: { x: 0 }
+    };
+    const floorElevenWritingSteps = new Set();
+    const floorLabelElements = floorLabelLayout.map((rect, index) => {
+      if (!corridorScene) return null;
+      const element = document.createElement('div');
+      element.className = 'corridor-floor-label';
+      element.dataset.roomIndex = String(index + 1);
+      element.style.left = rect.left + '%';
+      element.style.top = rect.top + '%';
+      element.style.width = rect.width + '%';
+      element.style.height = rect.height + '%';
+      corridorScene.appendChild(element);
+      return element;
+    }).filter(Boolean);
+    const doorNumberOnFloor = (roomIndex) => (
+      corridorFloor * 100 + roomIndex
+    );
+    const updateCorridorFloorLabels = () => {
+      floorLabelElements.forEach((element, index) => {
+        element.textContent = String(doorNumberOnFloor(index + 1));
+      });
+    };
+    updateCorridorFloorLabels();
+    const elevatorFloorButtonElements = [];
+    if (elevatorFloorButtons) {
+      for (let floor = 1; floor <= 11; floor += 1) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'elevator-floor-button';
+        button.dataset.floor = String(floor);
+        button.textContent = String(floor);
+        button.addEventListener('click', () => toggleElevatorFloor(floor));
+        elevatorFloorButtons.appendChild(button);
+        elevatorFloorButtonElements.push(button);
+      }
+    }
     const ritualState = {
       oldMan: {
         x: oldManConfig.x || 23.44,
@@ -2288,6 +2665,16 @@
       }
       return points[points.length - 1];
     };
+    const pathLength = (points) => {
+      let total = 0;
+      for (let index = 1; index < points.length; index += 1) {
+        total += Math.hypot(
+          points[index].x - points[index - 1].x,
+          points[index].y - points[index - 1].y
+        );
+      }
+      return total;
+    };
     const pathDirectionAt = (points, progress) => {
       const before = pointOnPath(points, Math.max(0, progress - .002));
       const after = pointOnPath(points, Math.min(1, progress + .002));
@@ -2298,7 +2685,14 @@
       }
       return dy < 0 ? 'up' : 'down';
     };
-    const setNpcPosition = (element, target, direction, sprites) => {
+    const setNpcPosition = (
+      element,
+      target,
+      direction,
+      sprites,
+      nameElement,
+      nameRaiseRatio = 0
+    ) => {
       if (!element || !target) return;
       const art = sprites || {};
       const sprite = direction === 'up'
@@ -2312,17 +2706,247 @@
       element.style.left = target.x + '%';
       element.style.top = target.y + '%';
       element.dataset.direction = direction;
-      element.classList.toggle('is-facing-right', direction === 'right');
+      const sideFacing = art.sideFacing || 'left';
+      const shouldFlip =
+        (direction === 'left' && sideFacing === 'right') ||
+        (direction === 'right' && sideFacing === 'left');
+      element.classList.toggle('is-facing-right', shouldFlip);
       element.hidden = !target.visible;
+      if (nameElement) {
+        nameElement.style.left = target.x + '%';
+        nameElement.style.top =
+          (target.y - 10.5 +
+            spriteSpanPercent(element) * (.1 - nameRaiseRatio)) + '%';
+        nameElement.hidden = !target.visible;
+        if (target.visible) fitNameTagToSprite(nameElement, element);
+      }
+    };
+    const floorElevenSpeakerPosition = (speakerId) => {
+      if (speakerId === 'bb905') {
+        return ritualState.oldMan.visible ? ritualState.oldMan : null;
+      }
+      const meeting = oldManConfig.floorElevenMeeting || {};
+      const position = meeting[speakerId];
+      if (!position || corridorFloor !== 11) return null;
+      return {
+        x: position.x + (floorElevenStepOffsets[speakerId]?.x || 0),
+        y: position.y
+      };
+    };
+    const floorElevenSpeakerElement = (speakerId) => {
+      if (speakerId === 'bb905') return oldManElement;
+      if (speakerId === 'bb1001') return bb1001Element;
+      if (speakerId === 'bb1104') return bb1104Element;
+      return null;
+    };
+    const animateFloorElevenStep = (speakerId) => {
+      const offset = floorElevenStepOffsets[speakerId];
+      if (!offset) return;
+      const cfg = floorElevenConversationConfig;
+      const distance = cfg.stepDistance || 2.2;
+      const outMs = cfg.stepOutMs || 180;
+      const holdMs = cfg.stepHoldMs || 650;
+      const backMs = cfg.stepBackMs || 180;
+      const totalMs = outMs + holdMs + backMs;
+      const direction = speakerId === 'bb905' ? 1 : -1;
+      const startedAt = performance.now();
+      const tick = () => {
+        const elapsed = performance.now() - startedAt;
+        let amount = 1;
+        if (elapsed < outMs) {
+          amount = elapsed / outMs;
+        } else if (elapsed < outMs + holdMs) {
+          amount = 1;
+        } else if (elapsed < totalMs) {
+          amount = 1 - (elapsed - outMs - holdMs) / backMs;
+        } else {
+          offset.x = 0;
+          return;
+        }
+        offset.x = direction * distance * amount;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    const startFloorElevenOverheard = () => {
+      if (floorElevenOverheard.active || floorElevenOverheard.done) return;
+      floorElevenOverheard.active = true;
+      floorElevenOverheard.startedAt = corridorRitualSeconds() * 1000;
+      floorElevenOverheard.lineIndex = -1;
+      floorElevenOverheard.charCount = -1;
+      lastOverheardLine = -1;
+      lastOverheardChars = -1;
+      window.dispatchEvent(new CustomEvent('game:floor-eleven-dialogue-open'));
+    };
+    const syncFloorElevenOverheard = () => {
+      if (!overheard || !overheardName || !overheardText) return;
+      const lines = floorElevenConversationConfig.lines || [];
+      const charDelay = floorElevenConversationConfig.charDelayMs || 55;
+      const lineHold = floorElevenConversationConfig.lineHoldMs || 900;
+      const elapsedMs = corridorRitualSeconds() * 1000 -
+        floorElevenOverheard.startedAt;
+      let offset = 0;
+      let activeIndex = -1;
+      for (let index = 0; index < lines.length; index += 1) {
+        const duration = Math.max(
+          1800,
+          Array.from(lines[index].text || '').length * charDelay + lineHold
+        );
+        const lineEnd = offset + duration;
+        if (lines[index].text === '（写字声）' &&
+            elapsedMs >= lineEnd &&
+            !floorElevenWritingSteps.has(index)) {
+          floorElevenWritingSteps.add(index);
+          animateFloorElevenStep(lines[index].speakerId);
+        }
+        if (elapsedMs < lineEnd) {
+          activeIndex = index;
+          break;
+        }
+        offset = lineEnd;
+      }
+      if (activeIndex < 0) {
+        floorElevenOverheard.active = false;
+        floorElevenOverheard.done = true;
+        overheard.hidden = true;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+        window.dispatchEvent(new CustomEvent('game:floor-eleven-dialogue-close'));
+        return;
+      }
+      const occupied = doorLocked ||
+        corridorInvestigationOpen ||
+        (npcChoice && !npcChoice.hidden) ||
+        (doorChoice && !doorChoice.hidden) ||
+        (stairChoice && !stairChoice.hidden);
+      if (occupied) {
+        overheard.hidden = true;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+        return;
+      }
+      const line = lines[activeIndex];
+      const chars = Array.from(line.text || '');
+      const charCount = Math.min(
+        chars.length,
+        Math.max(1, Math.floor((elapsedMs - offset) / charDelay) + 1)
+      );
+      if (floorElevenOverheard.lineIndex !== activeIndex) {
+        floorElevenOverheard.lineIndex = activeIndex;
+        floorElevenOverheard.charCount = -1;
+        overheardName.textContent =
+          characterDisplayName(line.speakerId) + '：';
+      }
+      if (floorElevenOverheard.charCount !== charCount) {
+        floorElevenOverheard.charCount = charCount;
+        overheardText.textContent = chars.slice(0, charCount).join('');
+      }
+      overheard.hidden = false;
+      if (corridorSpeakingBubble) {
+        const speaker = floorElevenSpeakerPosition(line.speakerId);
+        const speakerElement = floorElevenSpeakerElement(line.speakerId);
+        if (!speaker || !speakerElement) {
+          corridorSpeakingBubble.hidden = true;
+          return;
+        }
+        corridorSpeakingBubble.style.left =
+          (speaker.x + 4 -
+           spriteSpanPercent(speakerElement, 'width') * .27) + '%';
+        const interactingWithSpeaker = activeNpc &&
+          activeNpc.key === line.speakerId &&
+          doorBubble &&
+          !doorBubble.hidden;
+        corridorSpeakingBubble.style.top =
+          (speaker.y + (interactingWithSpeaker ? -12 : -7.5)) + '%';
+        corridorSpeakingBubble.hidden = false;
+      }
+    };
+    const syncCorridorOverheard = (elapsedMs, started) => {
+      if (!overheard || !overheardName || !overheardText) return;
+      if (floorElevenOverheard.active) {
+        syncFloorElevenOverheard();
+        return;
+      }
+      const occupied = doorLocked ||
+        corridorInvestigationOpen ||
+        (npcChoice && !npcChoice.hidden) ||
+        (doorChoice && !doorChoice.hidden);
+      const lines = overheardConfig.lines || [];
+      if (!started || occupied || !lines.length) {
+        overheard.hidden = true;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+        return;
+      }
+      let lineStart = 0;
+      let activeIndex = -1;
+      let activeLine = null;
+      for (let index = 0; index < lines.length; index += 1) {
+        const duration = lines[index].durationMs || 0;
+        if (elapsedMs < lineStart + duration) {
+          activeIndex = index;
+          activeLine = lines[index];
+          break;
+        }
+        lineStart += duration;
+      }
+      if (!activeLine) {
+        overheard.hidden = true;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+        return;
+      }
+      const chars = Array.from(activeLine.text || '');
+      const charDelay = overheardConfig.charDelayMs || 55;
+      const visibleCount = Math.min(
+        chars.length,
+        Math.max(1, Math.floor((elapsedMs - lineStart) / charDelay) + 1)
+      );
+      if (lastOverheardLine !== activeIndex) {
+        overheardName.textContent = activeLine.speaker
+          ? activeLine.speaker + '：'
+          : '';
+        lastOverheardLine = activeIndex;
+        lastOverheardChars = -1;
+      }
+      if (lastOverheardChars !== visibleCount) {
+        overheardText.textContent = chars.slice(0, visibleCount).join('');
+        lastOverheardChars = visibleCount;
+      }
+      overheard.hidden = false;
+      if (corridorSpeakingBubble) {
+        corridorSpeakingBubble.style.left =
+          (ritualState.oldMan.x + 4 -
+           spriteSpanPercent(oldManElement, 'width') * .27) + '%';
+        const interactionOnOldMan = activeNpc &&
+          activeNpc.key === 'oldMan' &&
+          doorBubble &&
+          !doorBubble.hidden;
+        const speechTop = interactionOnOldMan
+          ? activeNpc.y - 12
+          : ritualState.oldMan.y - 7.5;
+        corridorSpeakingBubble.style.top = speechTop + '%';
+        corridorSpeakingBubble.hidden = !ritualState.oldMan.visible;
+      }
+    };
+    const updateCorridorCharacterDepth = () => {
+      if (!corridorScene) return;
+      const sceneRect = corridorScene.getBoundingClientRect();
+      corridorScene.querySelectorAll('[data-room-character]').forEach((character) => {
+        if (character.hidden) return;
+        const rect = character.getBoundingClientRect();
+        character.style.zIndex = String(
+          100 + Math.round(rect.bottom - sceneRect.top)
+        );
+      });
     };
     const syncCorridorRitual = () => {
       const cfg = ritualConfig;
       const elapsedMs = corridorRitualSeconds() * 1000;
       const started = corridorRitualClock.started;
+      syncCorridorOverheard(elapsedMs, started);
       const ladyStart = landladyConfig.x || 30.2;
       const ladyY = landladyConfig.y || 58.89;
       const oldStart = oldManConfig.x || 23.44;
       const oldY = oldManConfig.y || 58.89;
+      const onFloorNine = corridorFloor === 9;
+      const onFloorEleven = corridorFloor === 11;
       const ladyTurnAt = landladyConfig.turnAtMs || 500;
       const ladyArriveAt = landladyConfig.arriveAtMs || 4000;
       const oldStartAt = oldManConfig.startAtMs || 1000;
@@ -2334,8 +2958,10 @@
       const approach = oldPath[oldPath.length - 1];
       const ladySprites = landladyConfig.sprites || {};
       const oldManSprites = oldManConfig.sprites || {};
+      const meeting = oldManConfig.floorElevenMeeting || {};
 
-      ritualState.landlady.visible = started && elapsedMs < ladyArriveAt;
+      ritualState.landlady.visible =
+        started && onFloorNine && elapsedMs < ladyArriveAt;
       let ladyDirection = 'left';
       if (ritualState.landlady.visible) {
         const ladyProgress = (elapsedMs - ladyTurnAt) /
@@ -2350,13 +2976,74 @@
         ritualState.landlady.y = point.y;
       }
       setNpcPosition(landladyElement, ritualState.landlady, ladyDirection,
-        ladySprites);
+        ladySprites, landladyNameElement);
 
-      ritualState.oldMan.visible = started && elapsedMs < oldBoardedAt;
+      const pairVisible = started && onFloorEleven;
+      if (meeting.bb1001 && meeting.bb1104) {
+        setNpcPosition(
+          bb1001Element,
+          {
+            x: meeting.bb1001.x + floorElevenStepOffsets.bb1001.x,
+            y: meeting.bb1001.y,
+            visible: pairVisible
+          },
+          'left',
+          { side: 'assets/BB1001_side.png', sideFacing: 'left' },
+          bb1001NameElement
+        );
+        setNpcPosition(
+          bb1104Element,
+          {
+            x: meeting.bb1104.x + floorElevenStepOffsets.bb1104.x,
+            y: meeting.bb1104.y,
+            visible: pairVisible
+          },
+          'left',
+          { side: 'assets/BB1104_side.png', sideFacing: 'right' },
+          bb1104NameElement
+        );
+      }
+      if (elevenBeggarElement) {
+        elevenBeggarElement.hidden = !pairVisible;
+        if (pairVisible && beggarNameElement) {
+          beggarNameElement.textContent = characterDisplayName('K');
+          beggarNameElement.hidden = false;
+          positionNameAtSpriteCenter(beggarNameElement, beggarKElement, 0, .1);
+          const sceneRect = corridorScene.getBoundingClientRect();
+          const kRect = beggarKElement.getBoundingClientRect();
+          elevenBeggarElement.style.zIndex = String(
+            100 + Math.round(kRect.bottom - sceneRect.top)
+          );
+        }
+      }
+
+      const topFloor = elevatorConfig.topFloor || 11;
+      const reachesTopAt = elevatorConfig.reachesTopAtMs || 18600;
+      const meetingPath = meeting.path || [];
+      const oldSpeed = pathLength(oldPath) /
+        Math.max(.001, (oldArriveAt - oldStartAt) / 1000);
+      const meetingDuration = oldSpeed > 0
+        ? pathLength(meetingPath) / oldSpeed * 1000
+        : 0;
+      const onElevenWalk = started &&
+        onFloorEleven &&
+        elapsedMs >= reachesTopAt;
+      ritualState.oldMan.visible =
+        (started && onFloorNine && elapsedMs < oldBoardedAt) ||
+        onElevenWalk;
       let oldManDirection = 'right';
       if (ritualState.oldMan.visible) {
         let point = { x: oldStart, y: oldY };
-        if (elapsedMs >= oldBoardAt) {
+        if (onElevenWalk && meetingPath.length) {
+          const progress = Math.min(
+            1,
+            (elapsedMs - reachesTopAt) / Math.max(1, meetingDuration)
+          );
+          point = pointOnPath(meetingPath, progress);
+          oldManDirection = progress >= 1
+            ? 'right'
+            : pathDirectionAt(meetingPath, progress);
+        } else if (elapsedMs >= oldBoardAt) {
           point = pointOnPath(
             [
               approach,
@@ -2378,25 +3065,27 @@
         }
         ritualState.oldMan.x = point.x;
         ritualState.oldMan.y = point.y;
+        if (onFloorEleven) {
+          ritualState.oldMan.x += floorElevenStepOffsets.bb905.x;
+        }
+      }
+      if (forcedOldManDirection) {
+        oldManDirection = forcedOldManDirection;
       }
       setNpcPosition(oldManElement, ritualState.oldMan, oldManDirection,
-        oldManSprites);
+        oldManSprites, oldManNameElement);
 
       const floorMs = elevatorConfig.floorTravelMs || cfg.floorTravelMs || 1000;
       const currentFloor = elevatorConfig.currentFloor || 9;
       const bottomFloor = elevatorConfig.bottomFloor || 3;
-      const topFloor = elevatorConfig.topFloor || 12;
       const leavesNinthAt = elevatorConfig.leavesNinthAtMs || 4000;
       const reachesBottomAt = elevatorConfig.reachesBottomAtMs || 10000;
       const returnsToNinthAt = elevatorConfig.returnsToNinthAtMs || 16000;
       const leavesNinthForTopAt =
         elevatorConfig.leavesNinthForTopAtMs || 16600;
-      const reachesTopAt = elevatorConfig.reachesTopAtMs || 19600;
       let floor = currentFloor;
-      let atCurrentFloor = false;
       if (elapsedMs < leavesNinthAt) {
         floor = currentFloor;
-        atCurrentFloor = true;
       } else if (elapsedMs < reachesBottomAt) {
         floor = currentFloor - Math.min(
           currentFloor - bottomFloor,
@@ -2409,7 +3098,6 @@
         );
       } else if (elapsedMs < leavesNinthForTopAt) {
         floor = currentFloor;
-        atCurrentFloor = true;
       } else if (elapsedMs < reachesTopAt) {
         floor = currentFloor + Math.min(
           topFloor - currentFloor,
@@ -2418,17 +3106,41 @@
       } else {
         floor = topFloor;
       }
+      if (elevatorSummon.requested &&
+          elapsedMs >= elevatorSummon.departAt) {
+        const fromFloor = elevatorSummon.fromFloor;
+        const targetFloor = elevatorSummon.targetFloor;
+        const distance = Math.abs(targetFloor - fromFloor);
+        const direction = Math.sign(targetFloor - fromFloor);
+        if (elapsedMs < elevatorSummon.arriveAt) {
+          const traveled = Math.min(
+            distance,
+            (elapsedMs - elevatorSummon.departAt) / floorMs
+          );
+          floor = fromFloor + direction * traveled;
+        } else {
+          floor = targetFloor;
+        }
+      }
+      if (!elevatorEntered &&
+          (elevatorRide.moving ||
+           elevatorRide.dwellTimer ||
+           elevatorRide.requests.size)) {
+        floor = elevatorRide.exactFloor;
+      }
       const boardingLocked = elapsedMs >= returnsToNinthAt &&
         elapsedMs < oldBoardedAt;
+      const atPlayerFloor = Math.abs(floor - corridorFloor) < .001;
       ritualState.elevator.accessible = started &&
-        atCurrentFloor &&
-        !boardingLocked;
+        atPlayerFloor &&
+        !boardingLocked &&
+        corridorServicesUnlocked;
       ritualState.elevator.boardingLocked = started && boardingLocked;
       ritualState.elevator.floor = Math.round(floor);
-      ritualState.elevator.atCurrentFloor = atCurrentFloor;
+      ritualState.elevator.atCurrentFloor = atPlayerFloor;
 
       if (elevatorDisplay && elevatorFloor) {
-        const showFloor = started && !atCurrentFloor;
+        const showFloor = started && !atPlayerFloor;
         elevatorDisplay.hidden = !showFloor;
         if (showFloor) {
           const displayFloor = String(Math.round(floor));
@@ -2438,6 +3150,21 @@
           }
         }
       }
+      updateCorridorCharacterDepth();
+      if (started && onFloorEleven) {
+        if (!floorElevenLocked) {
+          floorElevenLocked = true;
+          elevatorRide.requests.clear();
+          elevatorRide.direction = 0;
+          updateElevatorRideDisplay();
+        }
+        floorElevenLocked = true;
+        if (!corridorScene.hidden &&
+            !floorElevenOverheard.active &&
+            !floorElevenOverheard.done) {
+          startFloorElevenOverheard();
+        }
+      }
     };
 
     const npcSnapshot = (key) => {
@@ -2445,7 +3172,7 @@
       if (!state || !state.visible) return null;
       return {
         key,
-        name: key === 'oldMan' ? '905老头' : '301包租婆',
+        name: key === 'oldMan' ? '905老头' : '301大妈',
         x: state.x,
         y: state.y,
         footY: state.y + halfHeight
@@ -2483,8 +3210,20 @@
       const now = performance.now();
       if (now - lastElevatorBounceAt < 260) return;
       lastElevatorBounceAt = now;
-      x = Math.min(x, elevatorArea[0] - 1.2);
+      const clearance = .2;
+      const candidates = [
+        { x, y: elevatorArea[1] - halfHeight - clearance },
+        { x: elevatorArea[0] - clearance, y },
+        { x: elevatorArea[2] + clearance, y }
+      ].filter((point) => canStandAt(point.x, point.y));
+      const destination = candidates[0] || {
+        x,
+        y: elevatorArea[1] - halfHeight - clearance
+      };
+      x = destination.x;
+      y = destination.y;
       person.style.left = x + '%';
+      person.style.top = y + '%';
       keys.clear();
       person.classList.remove('is-elevator-bounced');
       void person.offsetWidth;
@@ -2538,8 +3277,8 @@
         activeElevator = false;
         if (doorBubble) {
           doorBubble.hidden = false;
-          doorBubble.style.left = activeNpc.x + '%';
-          doorBubble.style.top = (activeNpc.y - 10.5) + '%';
+          doorBubble.style.left = (activeNpc.x + 2.5) + '%';
+          doorBubble.style.top = (activeNpc.y - 7.5) + '%';
           doorBubble.style.transform = 'translate(-50%, -50%)';
           doorBubble.alt = '按 E 与' + activeNpc.name + '互动';
         }
@@ -2595,6 +3334,8 @@
         if (done) done();
         return;
       }
+      const ownsPause = corridorRitualClock.pausedAt === null;
+      if (ownsPause) pauseCorridorRitual();
       doorLocked = true;
       keys.clear();
       if (doorBubble) doorBubble.hidden = true;
@@ -2688,6 +3429,7 @@
         window.removeEventListener('keydown', onKey);
         doorLocked = false;
         keys.clear();
+        if (ownsPause) resumeCorridorRitual();
         updateCorridorDoorHighlight();
         if (done) done();
       };
@@ -2697,6 +3439,51 @@
       corridorDialogue.addEventListener('click', advance);
       window.addEventListener('keydown', onKey);
       showLine();
+    };
+
+    const maybeShowOldManDepartureDialogue = () => {
+      const departedAt = oldManConfig.boardedAtMs || 16600;
+      if (oldManDepartureDialogueShown ||
+          !corridorRitualClock.started ||
+          corridorRitualSeconds() * 1000 < departedAt ||
+          !corridorScene ||
+          corridorScene.hidden ||
+          doorLocked ||
+          corridorInvestigationOpen) {
+        return;
+      }
+      oldManDepartureDialogueShown = true;
+      pauseCorridorRitual();
+      showCorridorDoorMessage([
+        {
+          segments: [
+            { text: '（没有帮到老爷爷，要去解决混混才行）' }
+          ]
+        },
+        {
+          segments: [
+            { text: '（先要知道' },
+            { text: '混混们在哪儿', warning: true },
+            { text: '）' }
+          ]
+        }
+      ], () => {
+        corridorServicesUnlocked = true;
+        resumeCorridorRitual();
+        updateCorridorDoorHighlight();
+      });
+    };
+
+    const showFloorElevenLockedMessage = () => {
+      if (doorLocked) return;
+      pauseCorridorRitual();
+      showCorridorDoorMessage([
+        '（现在还不是离开的时候）',
+        '（要阻止混混杀人）'
+      ], () => {
+        resumeCorridorRitual();
+        updateCorridorDoorHighlight();
+      });
     };
 
     const hideNpcChoice = (resumeClock = true) => {
@@ -2763,13 +3550,162 @@
       closeCorridorInvestigation();
     }, true);
 
+    const hideStairChoice = () => {
+      if (stairChoice) stairChoice.hidden = true;
+      activeStairDoor = null;
+    };
+
+    const showStairChoice = (door) => {
+      if (!stairChoice || !door || doorLocked) return;
+      doorLocked = true;
+      activeStairDoor = door;
+      keys.clear();
+      pauseCorridorRitual();
+      if (doorBubble) doorBubble.hidden = true;
+      const bubble = door.bubble || {};
+      stairChoice.style.left = (bubble.left || 50) + '%';
+      stairChoice.style.top = (bubble.top || 50) + '%';
+      stairChoice.style.transform =
+        bubble.transform || 'translate(-50%, -100%)';
+      stairChoice.hidden = false;
+    };
+
+    const animateCorridorPerson = (target, duration) => new Promise((resolve) => {
+      const dx = target.x - x;
+      const dy = target.y - y;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        setFacing(dx < 0 ? 'left' : 'right');
+      } else {
+        setFacing(dy < 0 ? 'up' : 'down');
+      }
+      person.classList.add('is-changing-floor');
+      void person.offsetWidth;
+      x = target.x;
+      y = target.y;
+      person.style.left = x + '%';
+      person.style.top = y + '%';
+      setTimeout(resolve, duration);
+    });
+
+    const startStairTransition = async (door, direction) => {
+      if (stairTransitioning || !door) return;
+      const stair = door.id === stairConfig.left?.id
+        ? stairConfig.left
+        : stairConfig.middle;
+      if (!stair) return;
+      const duration = stairConfig.animationMs || 1500;
+      const origin = { x, y };
+      const anchor = { x: stair.x, y: stair.y };
+      stairTransitioning = true;
+      hideStairChoice();
+      resumeCorridorRitual();
+      await animateCorridorPerson(anchor, duration);
+      corridorFloor += direction;
+      updateCorridorFloorLabels();
+      syncCorridorRitual();
+      if (corridorFloor >= 1 && corridorFloor <= 7) {
+        await showNoviceGuidance();
+      }
+      await animateCorridorPerson(origin, duration);
+      person.classList.remove('is-changing-floor');
+      stairTransitioning = false;
+      doorLocked = false;
+      keys.clear();
+      updateCorridorDoorHighlight();
+      window.dispatchEvent(new CustomEvent('game:corridor-floor-change', {
+        detail: { floor: corridorFloor }
+      }));
+    };
+
+    const chooseStairDirection = (direction, closeOnly = false) => {
+      if (closeOnly) {
+        hideStairChoice();
+        doorLocked = false;
+        resumeCorridorRitual();
+        updateCorridorDoorHighlight();
+        return;
+      }
+      const door = activeStairDoor;
+      if (!door) return;
+      if ((direction === 'up' &&
+           corridorFloor >= (elevatorConfig.topFloor || 11)) ||
+          (direction === 'down' && corridorFloor <= 3)) {
+        hideStairChoice();
+        showCorridorDoorMessage(['待做'], () => {
+          resumeCorridorRitual();
+          updateCorridorDoorHighlight();
+        });
+        return;
+      }
+      startStairTransition(door, direction === 'up' ? 1 : -1);
+    };
+
+    stairChoiceButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const choice = button.dataset.choice;
+        if (choice === 'exit') {
+          chooseStairDirection(null, true);
+        } else {
+          chooseStairDirection(choice);
+        }
+      });
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (!stairChoice || stairChoice.hidden) return;
+      const action = event.code === 'KeyW'
+        ? 'up'
+        : event.code === 'KeyS'
+          ? 'down'
+          : event.key === 'Escape'
+            ? 'exit'
+            : null;
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (action === 'exit') {
+        chooseStairDirection(null, true);
+      } else {
+        chooseStairDirection(action);
+      }
+    }, true);
+
     const triggerElevatorInteraction = () => {
       if (!activeElevator || ritualState.elevator.boardingLocked) return;
+      if (floorElevenLocked) {
+        showFloorElevenLockedMessage();
+        return;
+      }
+      if (corridorServicesUnlocked) {
+        const elevatorRideActive = elevatorRide.moving ||
+          elevatorRide.dwellTimer ||
+          elevatorRide.requests.size > 0;
+        if (elevatorRideActive) {
+          queueElevatorFloor(corridorFloor, true);
+        } else {
+          const now = corridorRitualSeconds() * 1000;
+          const originalWorkEnd = elevatorConfig.reachesTopAtMs || 18600;
+          const floorMs = elevatorConfig.floorTravelMs ||
+            ritualConfig.floorTravelMs || 1000;
+          const originalWorkPending = now < originalWorkEnd;
+          const fromFloor = originalWorkPending
+            ? (elevatorConfig.topFloor || 11)
+            : ritualState.elevator.floor;
+          elevatorSummon.requested = true;
+          elevatorSummon.targetFloor = corridorFloor;
+          elevatorSummon.fromFloor = fromFloor;
+          elevatorSummon.departAt = originalWorkPending ? originalWorkEnd : now;
+          elevatorSummon.arriveAt = elevatorSummon.departAt +
+            Math.abs(corridorFloor - fromFloor) * floorMs;
+        }
+      }
       window.dispatchEvent(new CustomEvent('game:corridor-elevator', {
         detail: {
           floor: ritualState.elevator.floor,
           atCurrentFloor: ritualState.elevator.atCurrentFloor,
-          accessible: ritualState.elevator.accessible
+          accessible: ritualState.elevator.accessible,
+          targetFloor: elevatorSummon.targetFloor
         }
       }));
     };
@@ -2787,6 +3723,26 @@
       }));
       if (npc.key === 'oldMan' && action === 'investigate') {
         showOldManInvestigation();
+        return;
+      }
+      if (npc.key === 'oldMan' && action === 'talk') {
+        const directionBetween = (fromX, fromY, toX, toY) => {
+          const dx = toX - fromX;
+          const dy = toY - fromY;
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx < 0 ? 'left' : 'right';
+          }
+          return dy < 0 ? 'up' : 'down';
+        };
+        setFacing(directionBetween(x, y, npc.x, npc.y));
+        forcedOldManDirection = directionBetween(npc.x, npc.y, x, y);
+        syncCorridorRitual();
+        const lines = oldManConfig.talkLines || [];
+        showCorridorDoorMessage(lines, () => {
+          forcedOldManDirection = null;
+          resumeCorridorRitual();
+          updateCorridorDoorHighlight();
+        });
         return;
       }
       const message = action === 'investigate'
@@ -2862,11 +3818,27 @@
 
     const startCorridorDoorInteraction = (door) => {
       if (!door || doorLocked) return;
-      if (door.action === 'enter-hq1') {
+      const leftStairId = stairConfig.left && stairConfig.left.id;
+      const middleStairId = stairConfig.middle && stairConfig.middle.id;
+      if (floorElevenLocked &&
+          (door.id === leftStairId || door.id === middleStairId)) {
+        showFloorElevenLockedMessage();
+        return;
+      }
+      if (corridorServicesUnlocked &&
+          (door.id === leftStairId || door.id === middleStairId)) {
+        showStairChoice(door);
+        return;
+      }
+      if (door.action === 'enter-hq1' && corridorFloor === 9) {
         doorLocked = true;
         if (doorBubble) doorBubble.hidden = true;
         if (corridorDialogue) corridorDialogue.hidden = true;
         enterHqBase();
+        return;
+      }
+      if (corridorServicesUnlocked) {
+        showDoorChoice(door);
         return;
       }
       if (analysisStoryProgress.finished &&
@@ -2911,12 +3883,19 @@
       person.style.top = y + '%';
       facing = 'reset';
       setFacing(detail.facing || 'right');
+      corridorFloor = isFinite(detail.floor) ? detail.floor : 9;
+      if (detail.servicesUnlocked) corridorServicesUnlocked = true;
+      if (detail.departureDialogueHandled) {
+        oldManDepartureDialogueShown = true;
+      }
+      updateCorridorFloorLabels();
       doorLocked = false;
       keys.clear();
       activeDoor = null;
       activeNpc = null;
       activeElevator = false;
       hideDoorChoice();
+      hideStairChoice();
       if (npcChoice && !npcChoice.hidden) hideNpcChoice(false);
       closeCorridorInvestigation();
       resumeCorridorRitual();
@@ -2963,6 +3942,262 @@
       );
       if (button) button.click();
     }, true);
+
+    const updateElevatorRideDisplay = () => {
+      const shownFloor = Math.round(elevatorRide.exactFloor);
+      if (elevatorSceneFloor) {
+        elevatorSceneFloor.textContent = shownFloor + 'F';
+      }
+      elevatorFloorButtonElements.forEach((button) => {
+        button.classList.toggle(
+          'is-active',
+          elevatorRide.requests.has(Number(button.dataset.floor))
+        );
+      });
+    };
+
+    const hideElevatorDialogue = () => {
+      if (elevatorDialogue) elevatorDialogue.hidden = true;
+    };
+
+    const showElevatorTodo = () => {
+      if (!elevatorDialogue || !elevatorDialogueText) return;
+      elevatorDialogueText.textContent = '待做';
+      elevatorDialogue.hidden = false;
+    };
+
+    const showElevatorFloorLocked = () => {
+      if (!elevatorDialogue || !elevatorDialogueText) return;
+      elevatorDialogueText.textContent =
+        '（现在还不是离开的时候）\n（要阻止混混杀人）';
+      elevatorDialogue.hidden = false;
+    };
+
+    const selectNextElevatorFloor = () => {
+      const requests = Array.from(elevatorRide.requests).sort((a, b) => a - b);
+      if (!requests.length) return null;
+      const current = elevatorRide.exactFloor;
+      const above = requests.filter((floor) => floor > current + .001);
+      const below = requests.filter((floor) => floor < current - .001);
+      const exact = requests.find((floor) => Math.abs(floor - current) <= .001);
+      if (exact !== undefined && elevatorRide.direction === 0) return exact;
+      if (elevatorRide.direction > 0) {
+        if (above.length) return above[0];
+        if (below.length) {
+          elevatorRide.direction = -1;
+          return below[below.length - 1];
+        }
+      } else if (elevatorRide.direction < 0) {
+        if (below.length) return below[below.length - 1];
+        if (above.length) {
+          elevatorRide.direction = 1;
+          return above[0];
+        }
+      }
+      if (exact !== undefined) return exact;
+      if (above.length) {
+        elevatorRide.direction = 1;
+        return above[0];
+      }
+      elevatorRide.direction = -1;
+      return below[below.length - 1];
+    };
+
+    const finishElevatorArrival = (target) => {
+      elevatorRide.exactFloor = target;
+      elevatorRide.floor = target;
+      elevatorRide.targetFloor = target;
+      elevatorRide.moving = false;
+      elevatorRide.arrived = true;
+      if (elevatorEntered) {
+        corridorFloor = target;
+        updateCorridorFloorLabels();
+      }
+      const now = corridorRitualSeconds() * 1000;
+      elevatorSummon.requested = true;
+      elevatorSummon.targetFloor = target;
+      elevatorSummon.fromFloor = target;
+      elevatorSummon.departAt = now;
+      elevatorSummon.arriveAt = now;
+      updateElevatorRideDisplay();
+      const showGuidance = elevatorEntered &&
+        target >= 1 &&
+        target <= 7;
+      if (elevatorLeaveButton) elevatorLeaveButton.hidden = showGuidance;
+      window.dispatchEvent(new CustomEvent('game:elevator-arrive', {
+        detail: { floor: target }
+      }));
+      const beginDwell = () => {
+        if (elevatorLeaveButton && elevatorEntered) {
+          elevatorLeaveButton.hidden = false;
+        }
+        if (elevatorRide.dwellTimer) clearTimeout(elevatorRide.dwellTimer);
+        elevatorRide.dwellTimer = setTimeout(() => {
+          elevatorRide.dwellTimer = null;
+          elevatorRide.requests.delete(target);
+          updateElevatorRideDisplay();
+          if (!elevatorRide.requests.size) {
+            elevatorRide.direction = 0;
+            return;
+          }
+          elevatorRide.moving = false;
+          if (elevatorLeaveButton) elevatorLeaveButton.hidden = true;
+          startNextElevatorRide();
+        }, elevatorConfig.dwellMs || 5000);
+      };
+      if (showGuidance) {
+        showNoviceGuidance().then(beginDwell);
+      } else {
+        beginDwell();
+      }
+    };
+
+    const startNextElevatorRide = () => {
+      if (elevatorRide.moving) return;
+      const target = selectNextElevatorFloor();
+      if (target === null) {
+        elevatorRide.direction = 0;
+        return;
+      }
+      elevatorRide.targetFloor = target;
+      if (Math.abs(target - elevatorRide.exactFloor) <= .001) {
+        finishElevatorArrival(target);
+        return;
+      }
+      elevatorRide.arrived = false;
+      elevatorRide.moving = true;
+      if (elevatorLeaveButton) elevatorLeaveButton.hidden = true;
+      const fromFloor = elevatorRide.exactFloor;
+      const duration = Math.abs(target - fromFloor) * 1000;
+      const startedAt = performance.now();
+      elevatorRide.timer = setInterval(() => {
+        const progress = Math.min(1, (performance.now() - startedAt) / duration);
+        elevatorRide.exactFloor = fromFloor + (target - fromFloor) * progress;
+        updateElevatorRideDisplay();
+        if (progress < 1) return;
+        clearInterval(elevatorRide.timer);
+        elevatorRide.timer = null;
+        finishElevatorArrival(target);
+      }, 16);
+    };
+
+    const queueElevatorFloor = (targetFloor, allowOutside = false) => {
+      if (floorElevenLocked ||
+          (!elevatorEntered && !allowOutside) ||
+          activeNoviceGuidance) return;
+      const target = Math.max(1, Math.min(11, targetFloor));
+      hideElevatorDialogue();
+      elevatorRide.requests.add(target);
+      const targetAheadAndCloser =
+        elevatorRide.moving &&
+        ((elevatorRide.direction > 0 &&
+          target > elevatorRide.exactFloor + .001 &&
+          target < elevatorRide.targetFloor - .001) ||
+         (elevatorRide.direction < 0 &&
+          target < elevatorRide.exactFloor - .001 &&
+          target > elevatorRide.targetFloor + .001));
+      if (targetAheadAndCloser) {
+        if (elevatorRide.timer) clearInterval(elevatorRide.timer);
+        elevatorRide.timer = null;
+        elevatorRide.moving = false;
+        startNextElevatorRide();
+        updateElevatorRideDisplay();
+        return;
+      }
+      if (!elevatorRide.moving && !elevatorRide.dwellTimer) {
+        elevatorRide.direction = Math.sign(target - elevatorRide.exactFloor);
+        startNextElevatorRide();
+      }
+      updateElevatorRideDisplay();
+    };
+
+    const toggleElevatorFloor = (targetFloor) => {
+      if (!elevatorEntered || activeNoviceGuidance) return;
+      if (floorElevenLocked) {
+        hideElevatorDialogue();
+        showElevatorFloorLocked();
+        return;
+      }
+      const target = Math.max(1, Math.min(11, targetFloor));
+      hideElevatorDialogue();
+      if (!elevatorRide.requests.has(target)) {
+        queueElevatorFloor(target);
+        return;
+      }
+      elevatorRide.requests.delete(target);
+      updateElevatorRideDisplay();
+      window.dispatchEvent(new CustomEvent('game:elevator-cancel-floor', {
+        detail: { floor: target }
+      }));
+      const affectsCurrentStop = target === elevatorRide.targetFloor &&
+        (elevatorRide.moving || elevatorRide.dwellTimer);
+      if (!affectsCurrentStop || !elevatorRide.requests.size) return;
+      if (elevatorRide.timer) clearInterval(elevatorRide.timer);
+      elevatorRide.timer = null;
+      if (elevatorRide.dwellTimer) clearTimeout(elevatorRide.dwellTimer);
+      elevatorRide.dwellTimer = null;
+      elevatorRide.moving = false;
+      if (elevatorLeaveButton) elevatorLeaveButton.hidden = true;
+      startNextElevatorRide();
+    };
+
+    const enterCorridorElevator = () => {
+      if (elevatorEntered || !elevatorScene) return;
+      elevatorEntered = true;
+      doorLocked = true;
+      keys.clear();
+      if (!elevatorRide.moving &&
+          !elevatorRide.dwellTimer &&
+          !elevatorRide.requests.size) {
+        elevatorRide.floor = corridorFloor;
+        elevatorRide.exactFloor = corridorFloor;
+        elevatorRide.targetFloor = corridorFloor;
+        elevatorRide.direction = 0;
+        elevatorRide.arrived = true;
+      }
+      hideElevatorDialogue();
+      updateElevatorRideDisplay();
+      if (elevatorLeaveButton) {
+        elevatorLeaveButton.hidden = !elevatorRide.arrived;
+      }
+      if (corridorScene) corridorScene.hidden = true;
+      elevatorScene.hidden = false;
+      window.dispatchEvent(new CustomEvent('game:corridor-elevator-enter', {
+        detail: { floor: Math.round(elevatorRide.exactFloor) }
+      }));
+    };
+
+    const leaveCorridorElevator = () => {
+      if (!elevatorEntered || !elevatorScene || !elevatorRide.arrived) return;
+      if (elevatorRide.floor < 3) {
+        showElevatorTodo();
+        return;
+      }
+      elevatorEntered = false;
+      elevatorScene.hidden = true;
+      if (corridorScene) corridorScene.hidden = false;
+      person.hidden = false;
+      corridorFloor = elevatorRide.floor;
+      updateCorridorFloorLabels();
+      x = 79.3;
+      y = 76.2;
+      person.style.left = x + '%';
+      person.style.top = y + '%';
+      setFacing('up');
+      doorLocked = false;
+      keys.clear();
+      updateCorridorDoorHighlight();
+      window.dispatchEvent(new CustomEvent('game:corridor-elevator-close', {
+        detail: { floor: corridorFloor }
+      }));
+    };
+
+    if (elevatorLeaveButton) {
+      elevatorLeaveButton.addEventListener('click', leaveCorridorElevator);
+    }
+    if (elevatorDialogue) {
+      elevatorDialogue.addEventListener('click', hideElevatorDialogue);
+    }
 
     if (doorBubble) {
       doorBubble.addEventListener('click', (event) => {
@@ -3017,6 +4252,18 @@
       updateCorridorDoorHighlight();
       if (doorLocked) {
         keys.clear();
+        return;
+      }
+      maybeShowOldManDepartureDialogue();
+      if (doorLocked) {
+        keys.clear();
+        return;
+      }
+      if (corridorServicesUnlocked &&
+          !floorElevenLocked &&
+          ritualState.elevator.accessible &&
+          footInElevator(x, y + halfHeight)) {
+        enterCorridorElevator();
         return;
       }
       if (ritualState.elevator.boardingLocked &&
