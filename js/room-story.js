@@ -377,7 +377,7 @@
     if (!nameElement || !spriteElement) return;
     const height = spriteElement.offsetHeight;
     if (!height) return;
-    nameElement.style.fontSize = Math.max(9, height * ratio).toFixed(2) + 'px';
+    nameElement.style.fontSize = (height * ratio).toFixed(2) + 'px';
   }
 
   function spriteSpanPercent(spriteElement, axis = 'height') {
@@ -422,9 +422,67 @@
       info += '可能有个去世不久的老伴。';
     }
     return {
+      characterId: 'bb905',
       name: visitedCorridor ? '905老头' : '老头',
       big: elder.big || 'assets/BB905_big.png',
       info
+    };
+  }
+
+  const corridorNpcInvestigationProfiles = {
+    K: {
+      big: 'assets/K_big.png',
+      info: '女性乞丐，有股酒的味道，以乞丐的标准看还算干净'
+    },
+    bb1001: { profileId: 'maozi', big: 'assets/BB1001_big.png' },
+    bb1104: { profileId: 'haozi', big: 'assets/BB1104_big.png' }
+  };
+
+  function corridorNpcInvestigationData(characterId) {
+    const entry = corridorNpcInvestigationProfiles[characterId];
+    const name = characterDisplayName(characterId);
+    if (!entry) {
+      return {
+        characterId,
+        name,
+        big: 'assets/BB905_big.png',
+        info: '年轻的男性混混，看起来很不友善。'
+      };
+    }
+    if (entry.info) {
+      return {
+        characterId,
+        name,
+        big: entry.big,
+        info: entry.info
+      };
+    }
+    if (!characterKnowledge.analyzedProfiles.has(entry.profileId)) {
+      return {
+        characterId,
+        name,
+        big: entry.big,
+        info: '年轻的男性混混，看起来很不友善。'
+      };
+    }
+    const profile = voiceProfiles[entry.profileId] || {};
+    const basicInfo = [
+      profile.gender,
+      profile.age,
+      profile.address,
+      profile.job
+    ].filter(Boolean).join('　');
+    const summary = String(profile.summary || '')
+      .replace(/（[^（）]*）/g, '')
+      .replace(/\([^()]*\)/g, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return {
+      characterId,
+      name,
+      big: entry.big,
+      info: [basicInfo, summary].filter(Boolean).join('\n')
     };
   }
 
@@ -2510,6 +2568,10 @@
     const stairConfig = ritualConfig.stairs || {};
     const floorElevenConversationConfig =
       ritualConfig.floorElevenConversation || {};
+    const floorElevenTalkConfig = ritualConfig.floorElevenTalk || {};
+    const floorElevenExitConfig = ritualConfig.floorElevenExit || {};
+    const floorElevenInterruptionConfig =
+      ritualConfig.floorElevenInterruption || {};
     const beggarConfig = oldManConfig.floorElevenBeggar || {};
     const floorLabelLayout = ritualConfig.floorLabels || [];
     const elevatorArea = elevatorConfig.area || [74.3, 84.7, 84.6, 100];
@@ -2567,12 +2629,42 @@
     let lastElevatorFloor = '';
     let lastOverheardLine = -1;
     let lastOverheardChars = -1;
+    const instantOverheard = {
+      active: false,
+      name: '',
+      text: '',
+      timer: null,
+      onComplete: null
+    };
     const floorElevenOverheard = {
       active: false,
       done: false,
       startedAt: 0,
       lineIndex: -1,
       charCount: -1
+    };
+    const floorElevenExit = {
+      active: false,
+      done: false,
+      startedAt: 0,
+      oldManFloor: 11,
+      elevatorFloor: 11,
+      thugs: {}
+    };
+    const floorElevenInterruption = {
+      active: false,
+      done: false,
+      startedAt: 0,
+      lockUntilThugsGone: false,
+      playerDown: false,
+      kStanding: false,
+      supplementActive: false,
+      overheardResumed: false,
+      maozi: null,
+      k: null,
+      player: null,
+      resumeLineIndex: -1,
+      resumeElapsedMs: 0
     };
     const floorElevenStepOffsets = {
       bb905: { x: 0 },
@@ -2739,6 +2831,513 @@
       if (speakerId === 'bb1104') return bb1104Element;
       return null;
     };
+    const positionCorridorSpeakingBubble = (
+      speaker,
+      speakerElement,
+      sameTarget
+    ) => {
+      if (!corridorSpeakingBubble) return false;
+      if (!speaker || !speakerElement) {
+        corridorSpeakingBubble.hidden = true;
+        return false;
+      }
+      const bubbleWidth = spriteSpanPercent(corridorSpeakingBubble, 'width');
+      const left = sameTarget
+        ? speaker.x + 2.5 - bubbleWidth / 2
+        : speaker.x + 4 - spriteSpanPercent(speakerElement, 'width') * .27;
+      corridorSpeakingBubble.style.left = left + '%';
+      corridorSpeakingBubble.style.top =
+        (speaker.y + (sameTarget ? -12 : -7.5)) + '%';
+      corridorSpeakingBubble.hidden = false;
+      return true;
+    };
+    const startFloorElevenExit = () => {
+      if (floorElevenExit.active || floorElevenExit.done) return;
+      floorElevenExit.active = true;
+      floorElevenExit.startedAt = corridorRitualSeconds() * 1000;
+      floorElevenExit.oldManFloor = 11;
+      floorElevenExit.elevatorFloor = 11;
+      if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+      window.dispatchEvent(new CustomEvent('game:floor-eleven-exit-start'));
+    };
+    const syncFloorElevenExit = () => {
+      if (!floorElevenExit.active && !floorElevenExit.done) return;
+      const cfg = floorElevenExitConfig;
+      const meeting = oldManConfig.floorElevenMeeting || {};
+      const meetingPath = meeting.path || [];
+      const oldStartX = oldManConfig.x || 23.44;
+      const oldStartY = oldManConfig.y || 58.89;
+      const elevatorPath = meetingPath.slice().reverse();
+      const returnPath = ritualPath(oldStartX, oldStartY).slice().reverse();
+      const elapsedMs = floorElevenExit.done
+        ? Infinity
+        : corridorRitualSeconds() * 1000 - floorElevenExit.startedAt;
+      const onFloorEleven = corridorFloor === 11;
+      const onFloorNine = corridorFloor === 9;
+      const thugTarget = cfg.thugTarget || { x: 90.8, y: 51.89 };
+      const thugConfigs = [
+        ['bb1001', meeting.bb1001, cfg.bb1001 || {}],
+        ['bb1104', meeting.bb1104, cfg.bb1104 || {}]
+      ];
+
+      thugConfigs.forEach(([key, origin, timing]) => {
+        if (!origin) return;
+        const interruptionOrigin =
+          key === 'bb1001' &&
+          floorElevenInterruption.maozi &&
+          (floorElevenInterruption.active || floorElevenInterruption.done)
+            ? floorElevenInterruption.maozi
+            : origin;
+        const startAt = timing.startAtMs || 0;
+        const duration = timing.durationMs || 1500;
+        let xValue = interruptionOrigin.x;
+        let yValue = interruptionOrigin.y;
+        let visible = onFloorEleven;
+        let direction = 'left';
+        if (elapsedMs >= startAt) {
+          const progress = Math.min(1, (elapsedMs - startAt) / duration);
+          xValue = interruptionOrigin.x +
+            (thugTarget.x - interruptionOrigin.x) * progress;
+          yValue = interruptionOrigin.y +
+            (thugTarget.y - interruptionOrigin.y) * progress;
+          direction = pathDirectionAt(
+            [interruptionOrigin, thugTarget],
+            progress
+          );
+          if (progress >= 1) visible = false;
+        }
+        const target = {
+          x: xValue,
+          y: yValue,
+          visible
+        };
+        floorElevenExit.thugs[key] = target;
+        setNpcPosition(
+          key === 'bb1001' ? bb1001Element : bb1104Element,
+          target,
+          direction,
+          {
+            side: key === 'bb1001'
+              ? 'assets/BB1001_side.png'
+              : 'assets/BB1104_side.png',
+            sideFacing: key === 'bb1001' ? 'left' : 'right'
+          },
+          key === 'bb1001' ? bb1001NameElement : bb1104NameElement
+        );
+      });
+      const bothThugsGone =
+        floorElevenExit.thugs.bb1001 &&
+        floorElevenExit.thugs.bb1104 &&
+        !floorElevenExit.thugs.bb1001.visible &&
+        !floorElevenExit.thugs.bb1104.visible;
+      if (bothThugsGone && floorElevenInterruption.lockUntilThugsGone) {
+        floorElevenInterruption.lockUntilThugsGone = false;
+        floorElevenInterruption.active = false;
+        floorElevenInterruption.done = true;
+        doorLocked = false;
+        keys.clear();
+      }
+
+      const oldCfg = cfg.oldMan || {};
+      const oldStartAt = oldCfg.startAtMs || 3000;
+      const walkToElevatorMs = oldCfg.walkToElevatorMs || 3200;
+      const boardAt = oldCfg.boardAtMs || oldStartAt + walkToElevatorMs;
+      const departAt = oldCfg.elevatorDepartAtMs || boardAt + 200;
+      const arriveAt = oldCfg.elevatorArriveAtMs || departAt + 2000;
+      const returnStartAt = oldCfg.returnWalkStartAtMs || arriveAt + 200;
+      const returnEndAt = returnStartAt + (oldCfg.returnWalkMs || 6500);
+      let oldTarget = null;
+      let oldDirection = 'down';
+      if (elapsedMs < oldStartAt) {
+        if (onFloorEleven && elevatorPath.length) {
+          oldTarget = {
+            x: elevatorPath[0].x,
+            y: elevatorPath[0].y,
+            visible: true
+          };
+        }
+      } else if (elapsedMs < boardAt) {
+        const progress = Math.min(
+          1,
+          (elapsedMs - oldStartAt) / Math.max(1, walkToElevatorMs)
+        );
+        const point = elevatorPath.length
+          ? pointOnPath(elevatorPath, progress)
+          : { x: oldStartX, y: oldStartY };
+        oldTarget = { x: point.x, y: point.y, visible: onFloorEleven };
+        oldDirection = elevatorPath.length
+          ? pathDirectionAt(elevatorPath, progress)
+          : 'down';
+      } else if (elapsedMs >= returnStartAt && elapsedMs < returnEndAt) {
+        const progress = Math.min(
+          1,
+          (elapsedMs - returnStartAt) / Math.max(1, oldCfg.returnWalkMs || 6500)
+        );
+        const point = returnPath.length
+          ? pointOnPath(returnPath, progress)
+          : { x: oldStartX, y: oldStartY };
+        floorElevenExit.oldManFloor = 9;
+        oldTarget = { x: point.x, y: point.y, visible: onFloorNine };
+        oldDirection = returnPath.length
+          ? pathDirectionAt(returnPath, progress)
+          : 'left';
+      } else if (elapsedMs >= returnEndAt) {
+        floorElevenExit.oldManFloor = 9;
+      }
+      if (oldTarget) {
+        ritualState.oldMan.x = oldTarget.x;
+        ritualState.oldMan.y = oldTarget.y;
+        ritualState.oldMan.visible = oldTarget.visible;
+        setNpcPosition(
+          oldManElement,
+          oldTarget,
+          oldDirection,
+          oldManConfig.sprites || {},
+          oldManNameElement
+        );
+      } else {
+        ritualState.oldMan.visible = false;
+        setNpcPosition(
+          oldManElement,
+          { x: oldStartX, y: oldStartY, visible: false },
+          'left',
+          oldManConfig.sprites || {},
+          oldManNameElement
+        );
+      }
+
+      if (elapsedMs >= departAt) {
+        let currentExitFloor = 9;
+        if (elapsedMs < arriveAt) {
+          const progress = Math.min(
+            1,
+            (elapsedMs - departAt) / Math.max(1, arriveAt - departAt)
+          );
+          currentExitFloor = 11 - progress * 2;
+        }
+        floorElevenExit.elevatorFloor = currentExitFloor;
+        ritualState.elevator.floor = Math.round(currentExitFloor);
+        ritualState.elevator.atCurrentFloor =
+          Math.abs(currentExitFloor - corridorFloor) < .001;
+        ritualState.elevator.accessible =
+          ritualState.elevator.atCurrentFloor;
+        if (elevatorDisplay && elevatorFloor) {
+          elevatorDisplay.hidden = ritualState.elevator.atCurrentFloor;
+          const displayFloor = String(Math.round(currentExitFloor));
+          if (displayFloor !== lastElevatorFloor) {
+            elevatorFloor.textContent = displayFloor;
+            lastElevatorFloor = displayFloor;
+          }
+        }
+      }
+
+      if (elapsedMs >= returnEndAt && !floorElevenExit.done) {
+        floorElevenExit.active = false;
+        floorElevenExit.done = true;
+        window.dispatchEvent(new CustomEvent('game:floor-eleven-exit-complete'));
+      }
+    };
+    const floorElevenLineStartMs = (targetIndex) => {
+      const lines = floorElevenConversationConfig.lines || [];
+      const charDelay = floorElevenConversationConfig.charDelayMs || 55;
+      const lineHold = floorElevenConversationConfig.lineHoldMs || 900;
+      let offset = 0;
+      for (let index = 0; index < targetIndex; index += 1) {
+        offset += Math.max(
+          1800,
+          Array.from(lines[index].text || '').length * charDelay + lineHold
+        );
+      }
+      return offset;
+    };
+    const animateInterruptionPosition = (durationMs, update) =>
+      new Promise((resolve) => {
+        const startedAt = performance.now();
+        const tick = () => {
+          const progress = Math.min(
+            1,
+            (performance.now() - startedAt) / Math.max(1, durationMs)
+          );
+          const eased = progress < .5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+          update(eased, progress);
+          if (progress < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve();
+          }
+        };
+        requestAnimationFrame(tick);
+      });
+    const shakeCorridorElement = (element, durationMs) => {
+      if (!element) return Promise.resolve();
+      const left = parseFloat(element.style.left) || 0;
+      const top = parseFloat(element.style.top) || 0;
+      const animation = element.animate([
+        { left: left + '%', top: top + '%' },
+        { left: (left - .38) + '%', top: (top + .18) + '%', offset: .2 },
+        { left: (left + .38) + '%', top: (top - .18) + '%', offset: .42 },
+        { left: (left - .25) + '%', top: (top + .12) + '%', offset: .64 },
+        { left: left + '%', top: top + '%' }
+      ], {
+        duration: durationMs,
+        easing: 'ease-in-out'
+      });
+      return animation.finished.catch(() => {});
+    };
+    const syncFloorElevenInterruption = () => {
+      if (!floorElevenInterruption.active) return;
+      const state = floorElevenInterruption;
+      if (!floorElevenExit.active && !floorElevenExit.done && state.maozi) {
+        setNpcPosition(
+          bb1001Element,
+          {
+            x: state.maozi.x,
+            y: state.maozi.y,
+            visible: state.maozi.visible
+          },
+          state.maozi.direction || 'right',
+          { side: 'assets/BB1001_side.png', sideFacing: 'left' },
+          bb1001NameElement
+        );
+      }
+      if (state.k && beggarKElement && elevenBeggarElement) {
+        const kSize = state.kStanding ? 17 : 13.5;
+        beggarKElement.src = state.k.src;
+        beggarKElement.style.left = state.k.x + '%';
+        beggarKElement.style.top = state.k.y + '%';
+        beggarKElement.style.width = kSize + '%';
+        beggarKElement.style.height = kSize + '%';
+        beggarKElement.style.transform = state.kFacing === 'right'
+          ? 'translate(-50%, -50%) scaleX(-1)'
+          : 'translate(-50%, -50%)';
+        elevenBeggarElement.hidden = false;
+        if (beggarNameElement) {
+          beggarNameElement.hidden = false;
+          positionNameAtSpriteCenter(
+            beggarNameElement,
+            beggarKElement,
+            0,
+            state.kStanding ? 0 : .1
+          );
+        }
+      }
+      if (state.player) {
+        x = state.player.x;
+        y = state.player.y;
+        person.style.left = x + '%';
+        person.style.top = y + '%';
+        if (state.playerDown) {
+          person.style.transformOrigin = '50% 90%';
+          person.src = 'assets/P_lie.png';
+          person.style.transform =
+            'translate(-50%, -50%) rotate(' +
+            (state.playerFallAngle || 0) +
+            'deg)';
+        } else {
+          person.style.transformOrigin = '50% 50%';
+          person.src = state.kStanding ? 'assets/P.png' : 'assets/P_lie.png';
+          person.style.transform = 'translate(-50%, -50%)';
+        }
+      }
+    };
+    const showFloorElevenInterruptionSupplement = async () => {
+      const cfg = floorElevenInterruptionConfig;
+      const lines = cfg.supplementLines || [];
+      const charDelay = cfg.supplementCharDelayMs || 55;
+      const holdMs = cfg.supplementHoldMs || 650;
+      floorElevenInterruption.supplementActive = true;
+      if (overheard) overheard.hidden = false;
+      for (const line of lines) {
+        const chars = Array.from(line.text || '');
+        const name = characterDisplayName(line.speakerId) + '：';
+        if (overheardName) overheardName.textContent = name;
+        if (overheardText) overheardText.textContent = '';
+        if (corridorSpeakingBubble) {
+          const speaker = line.speakerId === 'bb1001' &&
+            floorElevenInterruption.maozi
+            ? floorElevenInterruption.maozi
+            : floorElevenSpeakerPosition(line.speakerId);
+          const speakerElement = floorElevenSpeakerElement(line.speakerId);
+          positionCorridorSpeakingBubble(speaker, speakerElement, false);
+        }
+        for (let index = 1; index <= chars.length; index += 1) {
+          if (overheardText) {
+            overheardText.textContent = chars.slice(0, index).join('');
+          }
+          await new Promise((resolve) => setTimeout(resolve, charDelay));
+        }
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+      }
+      if (overheard) overheard.hidden = true;
+      if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+      floorElevenInterruption.supplementActive = false;
+    };
+    const resumeFloorElevenOverheardAfterInterruption = () => {
+      const lines = floorElevenConversationConfig.lines || [];
+      const targetText =
+        floorElevenInterruptionConfig.skipToText ||
+        '对了，虽然你没有亲戚，可怜的小偷，但你还有个朋友！';
+      const targetIndex = lines.findIndex(
+        (line) => String(line.text || '').startsWith(targetText)
+      );
+      const resumeIndex = floorElevenInterruption.resumeLineIndex;
+      let resumeElapsed = floorElevenInterruption.resumeElapsedMs;
+      if (targetIndex >= 0 && (resumeIndex < 0 || resumeIndex < targetIndex)) {
+        resumeElapsed = floorElevenLineStartMs(targetIndex);
+      }
+      const now = corridorRitualSeconds() * 1000;
+      floorElevenOverheard.active = true;
+      floorElevenOverheard.done = false;
+      floorElevenOverheard.startedAt = now - resumeElapsed;
+      floorElevenOverheard.lineIndex = -1;
+      floorElevenOverheard.charCount = -1;
+      lastOverheardLine = -1;
+      lastOverheardChars = -1;
+      floorElevenInterruption.overheardResumed = true;
+      resumeCorridorRitual();
+      updateCorridorDoorHighlight();
+      window.dispatchEvent(new CustomEvent(
+        'game:floor-eleven-interruption-complete'
+      ));
+    };
+    const startFloorElevenInterruption = async () => {
+      if (floorElevenInterruption.active || floorElevenInterruption.done) {
+        resumeCorridorRitual();
+        return;
+      }
+      const meeting = oldManConfig.floorElevenMeeting || {};
+      const maoziOrigin = {
+        x: (meeting.bb1001 && meeting.bb1001.x) || 88.3,
+        y: (meeting.bb1001 && meeting.bb1001.y) || 51.89
+      };
+      const playerOrigin = { x, y };
+      const kOrigin = {
+        x: (beggarConfig.k && beggarConfig.k.left) || 56.2,
+        y: (beggarConfig.k && beggarConfig.k.top) || 42.2
+      };
+      const side = Math.sign(maoziOrigin.x - playerOrigin.x) || 1;
+      const contact = {
+        x: playerOrigin.x + side * 4.2,
+        y: playerOrigin.y
+      };
+      const kCollision = {
+        x: contact.x - side * 3.1,
+        y: contact.y
+      };
+      floorElevenInterruption.active = true;
+      floorElevenInterruption.done = false;
+      floorElevenInterruption.startedAt = performance.now();
+      floorElevenInterruption.lockUntilThugsGone = true;
+      floorElevenInterruption.overheardResumed = false;
+      floorElevenInterruption.playerDown = false;
+      floorElevenInterruption.kStanding = true;
+      floorElevenInterruption.kFacing = 'front';
+      floorElevenInterruption.playerFallAngle = 0;
+      floorElevenInterruption.maozi = {
+        ...maoziOrigin,
+        direction: side < 0 ? 'right' : 'left',
+        visible: true
+      };
+      floorElevenInterruption.k = {
+        ...kOrigin,
+        src: 'assets/K.png',
+        visible: true
+      };
+      floorElevenInterruption.player = {
+        ...playerOrigin,
+        visible: true
+      };
+      doorLocked = true;
+      keys.clear();
+      pauseCorridorRitual();
+      if (doorBubble) doorBubble.hidden = true;
+      if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+      window.dispatchEvent(new CustomEvent('game:floor-eleven-interruption-start'));
+
+      await animateInterruptionPosition(
+        floorElevenInterruptionConfig.approachMs || 900,
+        (amount) => {
+          floorElevenInterruption.maozi.x =
+            maoziOrigin.x + (contact.x - maoziOrigin.x) * amount;
+          floorElevenInterruption.maozi.y =
+            maoziOrigin.y + (contact.y - maoziOrigin.y) * amount;
+        }
+      );
+      floorElevenInterruption.maozi.x = contact.x;
+      floorElevenInterruption.maozi.y = contact.y;
+      const shakeMs = floorElevenInterruptionConfig.shakeMs || 240;
+      const kDash = animateInterruptionPosition(
+        floorElevenInterruptionConfig.kDashMs || 900,
+        (amount) => {
+          floorElevenInterruption.k.x =
+            kOrigin.x + (kCollision.x - kOrigin.x) * amount;
+          floorElevenInterruption.k.y =
+            kOrigin.y + (kCollision.y - kOrigin.y) * amount;
+        }
+      );
+      await Promise.all([
+        shakeCorridorElement(bb1001Element, shakeMs),
+        shakeCorridorElement(person, shakeMs)
+      ]);
+      floorElevenInterruption.playerDown = true;
+      const fallAnimation = animateInterruptionPosition(
+        floorElevenInterruptionConfig.fallMs || 340,
+        (amount) => {
+          floorElevenInterruption.playerFallAngle = 82 * amount;
+        }
+      );
+      await Promise.all([fallAnimation, kDash]);
+      await Promise.all([
+        shakeCorridorElement(beggarKElement, shakeMs),
+        shakeCorridorElement(bb1001Element, shakeMs)
+      ]);
+
+      const playerRetreatDesired = {
+        x: playerOrigin.x - side * 2.4,
+        y: playerOrigin.y
+      };
+      const playerRetreat = canStandAt(
+        playerRetreatDesired.x,
+        playerRetreatDesired.y
+      )
+        ? playerRetreatDesired
+        : playerOrigin;
+      const retreatDx = playerRetreat.x - playerOrigin.x;
+      const retreatDy = playerRetreat.y - playerOrigin.y;
+      const maoziRetreat = {
+        x: Math.max(5.3, Math.min(94, contact.x + side * 2.2)),
+        y: contact.y
+      };
+      const kRetreat = {
+        x: Math.max(5.3, Math.min(94, kCollision.x + retreatDx)),
+        y: Math.max(31, Math.min(83, kCollision.y + retreatDy))
+      };
+      floorElevenInterruption.playerDown = false;
+      floorElevenInterruption.maozi.direction = 'left';
+      floorElevenInterruption.kFacing = 'right';
+      await animateInterruptionPosition(
+        floorElevenInterruptionConfig.retreatMs || 320,
+        (amount) => {
+          floorElevenInterruption.maozi.x =
+            contact.x + (maoziRetreat.x - contact.x) * amount;
+          floorElevenInterruption.maozi.y =
+            contact.y + (maoziRetreat.y - contact.y) * amount;
+          floorElevenInterruption.player.x =
+            playerOrigin.x + retreatDx * amount;
+          floorElevenInterruption.player.y =
+            playerOrigin.y + retreatDy * amount;
+          floorElevenInterruption.k.x =
+            kCollision.x + (kRetreat.x - kCollision.x) * amount;
+          floorElevenInterruption.k.y =
+            kCollision.y + (kRetreat.y - kCollision.y) * amount;
+        }
+      );
+      floorElevenInterruption.playerFallAngle = 0;
+      await showFloorElevenInterruptionSupplement();
+      resumeFloorElevenOverheardAfterInterruption();
+    };
     const animateFloorElevenStep = (speakerId) => {
       const offset = floorElevenStepOffsets[speakerId];
       if (!offset) return;
@@ -2808,12 +3407,14 @@
       if (activeIndex < 0) {
         floorElevenOverheard.active = false;
         floorElevenOverheard.done = true;
+        startFloorElevenExit();
         overheard.hidden = true;
         if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
         window.dispatchEvent(new CustomEvent('game:floor-eleven-dialogue-close'));
         return;
       }
-      const occupied = doorLocked ||
+      const occupied =
+        (doorLocked && !floorElevenInterruption.overheardResumed) ||
         corridorInvestigationOpen ||
         (npcChoice && !npcChoice.hidden) ||
         (doorChoice && !doorChoice.hidden) ||
@@ -2832,43 +3433,54 @@
       if (floorElevenOverheard.lineIndex !== activeIndex) {
         floorElevenOverheard.lineIndex = activeIndex;
         floorElevenOverheard.charCount = -1;
-        overheardName.textContent =
-          characterDisplayName(line.speakerId) + '：';
       }
       if (floorElevenOverheard.charCount !== charCount) {
         floorElevenOverheard.charCount = charCount;
+        overheardName.textContent =
+          characterDisplayName(line.speakerId) + '：';
         overheardText.textContent = chars.slice(0, charCount).join('');
       }
       overheard.hidden = false;
       if (corridorSpeakingBubble) {
         const speaker = floorElevenSpeakerPosition(line.speakerId);
         const speakerElement = floorElevenSpeakerElement(line.speakerId);
-        if (!speaker || !speakerElement) {
-          corridorSpeakingBubble.hidden = true;
+        const eBubbleVisible = doorBubble && !doorBubble.hidden;
+        const sameTarget = eBubbleVisible &&
+          activeNpc &&
+          (activeNpc.key === line.speakerId ||
+           (activeNpc.key === 'oldMan' && line.speakerId === 'bb905'));
+        if (!positionCorridorSpeakingBubble(
+          speaker,
+          speakerElement,
+          sameTarget
+        )) {
           return;
         }
-        corridorSpeakingBubble.style.left =
-          (speaker.x + 4 -
-           spriteSpanPercent(speakerElement, 'width') * .27) + '%';
-        const interactingWithSpeaker = activeNpc &&
-          activeNpc.key === line.speakerId &&
-          doorBubble &&
-          !doorBubble.hidden;
-        corridorSpeakingBubble.style.top =
-          (speaker.y + (interactingWithSpeaker ? -12 : -7.5)) + '%';
-        corridorSpeakingBubble.hidden = false;
       }
     };
     const syncCorridorOverheard = (elapsedMs, started) => {
       if (!overheard || !overheardName || !overheardText) return;
-      if (floorElevenOverheard.active) {
-        syncFloorElevenOverheard();
+      if (floorElevenInterruption.supplementActive) return;
+      if (floorElevenExit.active || floorElevenExit.done) {
+        overheard.hidden = true;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
         return;
       }
       const occupied = doorLocked ||
         corridorInvestigationOpen ||
         (npcChoice && !npcChoice.hidden) ||
         (doorChoice && !doorChoice.hidden);
+      if (instantOverheard.active) {
+        overheardName.textContent = instantOverheard.name;
+        overheardText.textContent = instantOverheard.text;
+        overheard.hidden = false;
+        if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+        return;
+      }
+      if (floorElevenOverheard.active) {
+        syncFloorElevenOverheard();
+        return;
+      }
       const lines = overheardConfig.lines || [];
       if (!started || occupied || !lines.length) {
         overheard.hidden = true;
@@ -2911,19 +3523,49 @@
       }
       overheard.hidden = false;
       if (corridorSpeakingBubble) {
-        corridorSpeakingBubble.style.left =
-          (ritualState.oldMan.x + 4 -
-           spriteSpanPercent(oldManElement, 'width') * .27) + '%';
-        const interactionOnOldMan = activeNpc &&
-          activeNpc.key === 'oldMan' &&
-          doorBubble &&
-          !doorBubble.hidden;
-        const speechTop = interactionOnOldMan
-          ? activeNpc.y - 12
-          : ritualState.oldMan.y - 7.5;
-        corridorSpeakingBubble.style.top = speechTop + '%';
-        corridorSpeakingBubble.hidden = !ritualState.oldMan.visible;
+        const eBubbleVisible = doorBubble && !doorBubble.hidden;
+        const sameTarget = eBubbleVisible &&
+          activeNpc &&
+          activeNpc.key === 'oldMan';
+        if (!ritualState.oldMan.visible) {
+          corridorSpeakingBubble.hidden = true;
+        } else {
+          positionCorridorSpeakingBubble(
+            ritualState.oldMan,
+            oldManElement,
+            sameTarget
+          );
+        }
       }
+    };
+    const hideInstantOverheard = (notifyComplete = false) => {
+      const onComplete = instantOverheard.onComplete;
+      instantOverheard.active = false;
+      instantOverheard.name = '';
+      instantOverheard.text = '';
+      instantOverheard.onComplete = null;
+      if (instantOverheard.timer) {
+        clearTimeout(instantOverheard.timer);
+        instantOverheard.timer = null;
+      }
+      if (notifyComplete && onComplete) onComplete();
+    };
+    const showInstantOverheard = (name, text, durationMs, onComplete = null) => {
+      hideInstantOverheard();
+      instantOverheard.active = true;
+      instantOverheard.name = name;
+      instantOverheard.text = text;
+      instantOverheard.onComplete = onComplete;
+      if (overheard && overheardName && overheardText) {
+        overheardName.textContent = name;
+        overheardText.textContent = text;
+        overheard.hidden = false;
+      }
+      if (corridorSpeakingBubble) corridorSpeakingBubble.hidden = true;
+      instantOverheard.timer = setTimeout(() => {
+        instantOverheard.timer = null;
+        hideInstantOverheard(true);
+      }, durationMs);
     };
     const updateCorridorCharacterDepth = () => {
       if (!corridorScene) return;
@@ -3150,6 +3792,12 @@
           }
         }
       }
+      if (floorElevenExit.active || floorElevenExit.done) {
+        syncFloorElevenExit();
+      }
+      if (floorElevenInterruption.active) {
+        syncFloorElevenInterruption();
+      }
       updateCorridorCharacterDepth();
       if (started && onFloorEleven) {
         if (!floorElevenLocked) {
@@ -3182,11 +3830,65 @@
       const radius = ritualConfig.npcInteractionRadius || 9;
       let nearest = null;
       let distance = Infinity;
-      ['oldMan', 'landlady'].forEach((key) => {
-        const npc = npcSnapshot(key);
+      const npcs = ['oldMan', 'landlady']
+        .map(npcSnapshot)
+        .filter(Boolean);
+      if (corridorFloor === 11 &&
+          elevenBeggarElement &&
+          !elevenBeggarElement.hidden &&
+          beggarConfig.k) {
+        const activeKPosition = floorElevenInterruption.active &&
+          floorElevenInterruption.k
+          ? floorElevenInterruption.k
+          : null;
+        const kX = activeKPosition
+          ? activeKPosition.x
+          : beggarConfig.k.left;
+        const kY = activeKPosition
+          ? activeKPosition.y
+          : beggarConfig.k.top;
+        const kHeight = activeKPosition &&
+          floorElevenInterruption.kStanding
+          ? 17
+          : (beggarConfig.k.height || 13.5);
+        npcs.push({
+          key: 'K',
+          name: characterDisplayName('K'),
+          x: kX,
+          y: kY,
+          footY: kY + kHeight / 2
+        });
+      }
+      if (corridorFloor === 11) {
+        const meeting = oldManConfig.floorElevenMeeting || {};
+        [
+          ['bb1001', bb1001Element, meeting.bb1001],
+          ['bb1104', bb1104Element, meeting.bb1104]
+        ].forEach(([key, element, position]) => {
+          if (!element || element.hidden || !position) return;
+          const exitPosition = floorElevenExit.active
+            ? floorElevenExit.thugs[key]
+            : null;
+          const xValue = exitPosition
+            ? exitPosition.x
+            : position.x + (floorElevenStepOffsets[key]?.x || 0);
+          const yValue = exitPosition ? exitPosition.y : position.y;
+          npcs.push({
+            key,
+            name: characterDisplayName(key),
+            x: xValue,
+            y: yValue,
+            footY: yValue + halfHeight
+          });
+        });
+      }
+      npcs.forEach((npc) => {
         if (!npc) return;
         const currentDistance = Math.hypot(footX - npc.x, footY - npc.footY);
-        if (currentDistance <= radius && currentDistance < distance) {
+        const npcRadius = npc.key === 'K'
+          ? (beggarConfig.interactionRadius || radius)
+          : radius;
+        if (currentDistance <= npcRadius && currentDistance < distance) {
           nearest = npc;
           distance = currentDistance;
         }
@@ -3519,10 +4221,9 @@
       updateCorridorDoorHighlight();
     };
 
-    const showOldManInvestigation = () => {
-      if (!investigationOverlay) return;
-      roomProgress.visitedCorridor = true;
-      const data = oldManInvestigationData(true);
+    const showCorridorInvestigation = (data) => {
+      if (!investigationOverlay || !data) return;
+      investigationOverlay.dataset.characterId = data.characterId || '';
       if (investigationName) investigationName.textContent = data.name;
       if (investigationBig) investigationBig.src = data.big;
       if (investigationInfo) investigationInfo.textContent = data.info;
@@ -3532,6 +4233,13 @@
       if (doorBubble) doorBubble.hidden = true;
       investigationOverlay.hidden = false;
       corridorInvestigationOpen = true;
+    };
+    const showOldManInvestigation = () => {
+      roomProgress.visitedCorridor = true;
+      showCorridorInvestigation(oldManInvestigationData(true));
+    };
+    const showNpcInvestigation = (characterId) => {
+      showCorridorInvestigation(corridorNpcInvestigationData(characterId));
     };
 
     if (investigationExit) {
@@ -3710,6 +4418,58 @@
       }));
     };
 
+    const startFloorElevenTalk = (npc) => {
+      const sourceLines = floorElevenTalkConfig.lines || [];
+      if (!sourceLines.length) return;
+      const interruptionSnapshot =
+        floorElevenOverheard.active && !floorElevenOverheard.done
+          ? {
+            lineIndex: floorElevenOverheard.lineIndex,
+            elapsedMs: corridorRitualSeconds() * 1000 -
+              floorElevenOverheard.startedAt
+          }
+          : null;
+      const directionBetween = (fromX, fromY, toX, toY) => {
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          return dx < 0 ? 'left' : 'right';
+        }
+        return dy < 0 ? 'up' : 'down';
+      };
+      const meeting = oldManConfig.floorElevenMeeting || {};
+      const faceTarget = npc.key === 'bb1104'
+        ? npc
+        : meeting.bb1001 || npc;
+      setFacing(directionBetween(x, y, faceTarget.x, faceTarget.y));
+      if (npc.key === 'oldMan') {
+        forcedOldManDirection = directionBetween(npc.x, npc.y, x, y);
+        syncCorridorRitual();
+      }
+      const lines = sourceLines.map((line) => {
+        const text = String(line.text || '').replace(
+          /\{\{([^}]+)\}\}/g,
+          (match, characterId) => characterDisplayName(characterId)
+        );
+        return line.speakerId
+          ? characterDisplayName(line.speakerId) + '：' + text
+          : text;
+      });
+      showCorridorDoorMessage(lines, () => {
+        if (npc.key === 'oldMan') forcedOldManDirection = null;
+        if (interruptionSnapshot && !floorElevenInterruption.done) {
+          floorElevenInterruption.resumeLineIndex =
+            interruptionSnapshot.lineIndex;
+          floorElevenInterruption.resumeElapsedMs =
+            interruptionSnapshot.elapsedMs;
+          void startFloorElevenInterruption();
+        } else {
+          resumeCorridorRitual();
+          updateCorridorDoorHighlight();
+        }
+      });
+    };
+
     const chooseNpcAction = (action) => {
       const npc = npcChoiceTarget;
       if (!npc) return;
@@ -3723,6 +4483,23 @@
       }));
       if (npc.key === 'oldMan' && action === 'investigate') {
         showOldManInvestigation();
+        return;
+      }
+      if ((npc.key === 'bb1001' || npc.key === 'bb1104') &&
+          action === 'investigate') {
+        showNpcInvestigation(npc.key);
+        return;
+      }
+      if (npc.key === 'K' && action === 'investigate') {
+        showNpcInvestigation('K');
+        return;
+      }
+      if (corridorFloor === 11 &&
+          action === 'talk' &&
+          (npc.key === 'oldMan' ||
+           npc.key === 'bb1001' ||
+           npc.key === 'bb1104')) {
+        startFloorElevenTalk(npc);
         return;
       }
       if (npc.key === 'oldMan' && action === 'talk') {
@@ -3743,6 +4520,21 @@
           resumeCorridorRitual();
           updateCorridorDoorHighlight();
         });
+        return;
+      }
+      if (npc.key === 'K' && action === 'talk') {
+        const duration = beggarConfig.talkRefusalDurationMs || 2000;
+        showInstantOverheard(
+          `‘${npc.name}’`,
+          beggarConfig.talkRefusalText || '拒绝了你的对话',
+          duration,
+          () => {
+            doorLocked = false;
+            keys.clear();
+            resumeCorridorRitual();
+            updateCorridorDoorHighlight();
+          }
+        );
         return;
       }
       const message = action === 'investigate'

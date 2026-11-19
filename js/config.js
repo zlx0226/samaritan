@@ -271,6 +271,47 @@ window.ROOF_UI_CONFIG = {
         { speakerId: 'bb1104', text: '看到了没？这个点过来！否则我就杀了你那个倒霉的小朋友！' }
       ]
     },
+    floorElevenTalk: {
+      lines: [
+        { speakerId: 'bb1104', text: '你又是哪根葱？' },
+        { text: '……' },
+        { speakerId: 'bb1001', text: '哟、哟，知道我们要杀人，又如何？我们不好惹！' },
+        { text: '……' },
+        { speakerId: 'bb1104', text: '呵！叫警察？你是上城来的吗？又本事你去叫叫看！' },
+        { speakerId: 'bb1104', text: '警察管用，我叫你爸爸！' },
+        { speakerId: 'bb1001', text: '哈哈哈！' },
+        { speakerId: 'bb1104', text: '{{bb1001}}，让这热心市民滚远点！' }
+      ]
+    },
+    floorElevenExit: {
+      thugTarget: { x: 90.8, y: 39.14 },
+      bb1001: { startAtMs: 0, durationMs: 1500 },
+      bb1104: { startAtMs: 1400, durationMs: 1500 },
+      oldMan: {
+        startAtMs: 3000,
+        walkToElevatorMs: 3200,
+        boardAtMs: 6200,
+        elevatorDepartAtMs: 6400,
+        elevatorArriveAtMs: 8400,
+        returnWalkStartAtMs: 8600,
+        returnWalkMs: 6500
+      }
+    },
+    floorElevenInterruption: {
+      skipToText: '对了，虽然你没有亲戚，可怜的小偷，但你还有个朋友！',
+      approachMs: 900,
+      shakeMs: 240,
+      fallMs: 340,
+      kDashMs: 900,
+      retreatMs: 320,
+      supplementCharDelayMs: 55,
+      supplementHoldMs: 650,
+      supplementLines: [
+        { speakerId: 'bb1001', text: '哎哟！找茬啊！' },
+        { speakerId: 'bb1104', text: '先别管那两个神经病流浪汉了！' },
+        { speakerId: 'bb1104', text: '说到哪儿了？' }
+      ]
+    },
     landlady: {
       x: 30.2,
       y: 58.89,
@@ -312,6 +353,9 @@ window.ROOF_UI_CONFIG = {
         bb1104: { x: 93.2, y: 51.89 }
       },
       floorElevenBeggar: {
+        interactionRadius: 9,
+        talkRefusalText: '拒绝了你的对话',
+        talkRefusalDurationMs: 2000,
         paper: { left: 56.2, top: 48.5, width: 12.636, height: 8.1 },
         k: { left: 56.2, top: 42.2, width: 13.5, height: 13.5 },
         beer: { left: 57, top: 47.5, width: 9 }
